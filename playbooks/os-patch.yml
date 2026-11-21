@@ -1,0 +1,54 @@
+# Installs all pending Ubuntu package updates, one node at a time, and reboots when required.
+# Kubernetes packages are held and not touched here (see k8s-upgrade.yml).
+- name: Patch the operating system
+  hosts: k8s_cluster
+  serial: 1
+  max_fail_percentage: 0
+  tasks:
+    - name: Check whether the node is part of the cluster
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: patch_kubelet_conf
+
+    - name: Check for pending updates
+      ansible.builtin.apt:
+        upgrade: dist
+        update_cache: true
+      check_mode: true
+      register: patch_pending
+
+    - name: Check whether a reboot is already pending
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: patch_reboot_before
+
+    - name: Decide whether there is anything to do
+      ansible.builtin.set_fact:
+        patch_needed: "{{ patch_pending.changed or patch_reboot_before.stat.exists }}"
+
+    - name: Patch the node
+      when: patch_needed
+      block:
+        - name: Drain the node
+          ansible.builtin.include_tasks: tasks/node-maintenance-start.yml
+          when: patch_kubelet_conf.stat.exists
+
+        - name: Install updates
+          ansible.builtin.apt:
+            upgrade: dist
+            autoremove: true
+
+        - name: Check whether a reboot is required
+          ansible.builtin.stat:
+            path: /var/run/reboot-required
+          register: patch_reboot
+
+        - name: Reboot
+          ansible.builtin.reboot:
+            reboot_timeout: 1800
+            msg: Reboot after OS patching (infra os-patch)
+          when: patch_reboot.stat.exists and os_patch_reboot | bool
+
+        - name: Return the node to service
+          ansible.builtin.include_tasks: tasks/node-maintenance-end.yml
+          when: patch_kubelet_conf.stat.exists

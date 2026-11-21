@@ -1,0 +1,22 @@
+- name: Install disk monitoring tools
+  ansible.builtin.apt:
+    name:
+      - smartmontools
+      - nvme-cli
+      - mdadm
+    state: present
+
+- name: Configure smartd (monitor all disks, weekly short and monthly long self-test)
+  ansible.builtin.copy:
+    dest: /etc/smartd.conf
+    mode: "0644"
+    content: |
+      # Managed by Ansible (roles/diskhealth).
+      DEVICESCAN -a -o on -S on -n standby,q -s (S/../../7/02|L/../01/./04) -m root
+  notify: Restart smartd
+
+- name: Enable smartd
+  ansible.builtin.systemd_service:
+    name: smartmontools
+    enabled: true
+    state: started

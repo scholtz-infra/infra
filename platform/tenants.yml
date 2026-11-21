@@ -1,0 +1,7 @@
+# Application repositories that may deploy to the cluster from GitHub Actions.
+# Each entry gets its namespace and full control inside that namespace only (ClusterRole "admin").
+# The repository owner must also be listed in github_oidc_allowed_owners (inventory group_vars).
+# See docs/app-deploy.md for the workflow snippet to use in the application repository.
+tenants: []
+# - namespace: my-app
+#   repository: scholtz-infra/my-app

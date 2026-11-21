@@ -1,0 +1,22 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "prHourlyLimit": 2,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Versions annotated with a '# renovate:' comment on the line above",
+      "managerFilePatterns": ["/^inventory/.+\\.ya?ml$/", "/^platform/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+)(?: registryUrl=(?<registryUrl>\\S+))? depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s+\\S+: \"(?<currentValue>[^\"]+)\""
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Kubernetes minor upgrades are done one minor at a time and need the k8s-upgrade playbook",
+      "matchDepNames": ["kubernetes/kubernetes"],
+      "separateMinorPatch": true
+    }
+  ]
+}

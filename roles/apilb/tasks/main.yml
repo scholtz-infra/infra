@@ -1,0 +1,21 @@
+- name: Install HAProxy
+  ansible.builtin.apt:
+    name: haproxy
+    state: present
+
+- name: Configure the local API server load balancer
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    mode: "0644"
+    validate: /usr/sbin/haproxy -c -f %s
+  notify: Reload haproxy
+
+- name: Enable HAProxy
+  ansible.builtin.systemd_service:
+    name: haproxy
+    enabled: true
+    state: started
+
+- name: Apply load balancer changes now
+  ansible.builtin.meta: flush_handlers

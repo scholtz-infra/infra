@@ -1,0 +1,87 @@
+# Installs/updates everything that runs inside the cluster and is owned by this repository:
+# CNI, storage, infrastructure applications (platform/releases.yml) and tenant access.
+- name: Platform applications
+  hosts: "{{ kubectl_host | default('control_plane[0]') }}"
+  gather_facts: true
+  vars_files:
+    - ../platform/releases.yml
+    - ../platform/tenants.yml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  vars:
+    helm_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts['architecture']] }}"
+  tasks:
+    - name: Check the installed Helm version
+      ansible.builtin.command: /usr/local/bin/helm version --short
+      register: platform_helm_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Install Helm
+      when: platform_helm_installed.rc != 0 or ('v' ~ helm_version) not in platform_helm_installed.stdout
+      block:
+        - name: Download Helm
+          ansible.builtin.get_url:
+            url: "https://get.helm.sh/helm-v{{ helm_version }}-linux-{{ helm_arch }}.tar.gz"
+            dest: "/tmp/helm-v{{ helm_version }}.tar.gz"
+            checksum: "sha256:https://get.helm.sh/helm-v{{ helm_version }}-linux-{{ helm_arch }}.tar.gz.sha256sum"
+            mode: "0644"
+
+        - name: Unpack Helm
+          ansible.builtin.unarchive:
+            src: "/tmp/helm-v{{ helm_version }}.tar.gz"
+            dest: /usr/local/bin
+            remote_src: true
+            extra_opts: ["--strip-components=1", "linux-{{ helm_arch }}/helm"]
+            mode: "0755"
+
+    - name: Create the values directory
+      ansible.builtin.file:
+        path: /etc/kubernetes/platform
+        state: directory
+        mode: "0700"
+
+    - name: Render Helm values
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../platform/values/{{ item.name }}.yaml"
+        dest: "/etc/kubernetes/platform/{{ item.name }}.yaml"
+        mode: "0600"
+      loop: "{{ platform_releases }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Install or upgrade Helm releases
+      ansible.builtin.command: >-
+        /usr/local/bin/helm upgrade --install {{ item.name }} {{ item.chart }}
+        --repo {{ item.repo }}
+        --version {{ item.version }}
+        --namespace {{ item.namespace }} --create-namespace
+        --values /etc/kubernetes/platform/{{ item.name }}.yaml
+        --wait --timeout 15m
+      loop: "{{ platform_releases }}"
+      loop_control:
+        label: "{{ item.name }} {{ item.version }}"
+      changed_when: true
+
+    - name: Wait for all nodes to be Ready
+      ansible.builtin.command: kubectl wait --for=condition=Ready nodes --all --timeout=300s
+      changed_when: false
+
+    - name: Install local-path-provisioner
+      ansible.builtin.command: >-
+        kubectl apply -f
+        https://raw.githubusercontent.com/rancher/local-path-provisioner/v{{ local_path_provisioner_version }}/deploy/local-path-storage.yaml
+      register: platform_local_path
+      changed_when: "'created' in platform_local_path.stdout or 'configured' in platform_local_path.stdout"
+
+    - name: Render tenant namespaces and permissions
+      ansible.builtin.template:
+        src: tenants.yaml.j2
+        dest: /etc/kubernetes/platform/tenants.yaml
+        mode: "0600"
+
+    - name: Apply tenant namespaces and permissions
+      ansible.builtin.command: kubectl apply -f /etc/kubernetes/platform/tenants.yaml
+      register: platform_tenants
+      changed_when: "'created' in platform_tenants.stdout or 'configured' in platform_tenants.stdout"
+      when: tenants | length > 0

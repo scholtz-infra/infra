@@ -1,0 +1,22 @@
+kubeProxyReplacement: true
+# local HAProxy on every node (roles/apilb)
+k8sServiceHost: 127.0.0.1
+k8sServicePort: {{ kube_api_lb_port }}
+
+routingMode: tunnel
+tunnelProtocol: vxlan
+
+ipam:
+  mode: cluster-pool
+  operator:
+    clusterPoolIPv4PodCIDRList:
+      - {{ pod_cidr }}
+    clusterPoolIPv4MaskSize: 24
+
+# Nodes only have public IPs: encrypt all pod traffic between nodes.
+encryption:
+  enabled: true
+  type: wireguard
+
+operator:
+  replicas: {{ 2 if k8s_multi_node else 1 }}

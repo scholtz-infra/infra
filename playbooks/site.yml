@@ -1,0 +1,126 @@
+# Converges every server in the inventory into the cluster. Idempotent: run it after every
+# inventory or configuration change. Creates the cluster on day one, joins new nodes later.
+- name: Preflight
+  hosts: k8s_cluster
+  gather_facts: false
+  tasks:
+    - name: Validate the inventory
+      ansible.builtin.assert:
+        that:
+          - groups['control_plane'] | length in [1, 3, 5]
+          - groups['k8s_cluster'] | map('extract', hostvars, 'ansible_host') | select('match', '^203\.0\.113\.') | list | length == 0
+          - groups['control_plane'] | difference(ansible_play_hosts_all) | length == 0
+        fail_msg: >-
+          Inventory problem: control_plane must have 1, 3 or 5 hosts (etcd quorum), no host may
+          still use the 203.0.113.x placeholder address, and site.yml must not be run with a
+          --limit that excludes control-plane nodes.
+      run_once: true
+
+- name: Prepare nodes
+  hosts: k8s_cluster
+  roles:
+    - base
+    - firewall
+    - diskhealth
+    - containerd
+    - apilb
+    - kubernetes
+
+- name: Create the cluster on the first control-plane node
+  hosts: control_plane
+  gather_facts: false
+  tasks:
+    - name: Decide whether a new cluster has to be created
+      ansible.builtin.set_fact:
+        k8s_do_init: "{{ k8s_joined_cps | length == 0 and inventory_hostname == groups['control_plane'][0] }}"
+
+    - name: Initialise the cluster
+      ansible.builtin.command: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml
+      args:
+        creates: /etc/kubernetes/admin.conf
+      when: k8s_do_init
+
+    - name: Record cluster membership
+      ansible.builtin.set_fact:
+        k8s_joined: true
+      when: k8s_do_init
+
+- name: Join additional control-plane nodes
+  hosts: control_plane
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Join the control plane
+      when: not k8s_joined
+      block:
+        - name: Upload control-plane certificates
+          ansible.builtin.command: kubeadm init phase upload-certs --upload-certs
+          delegate_to: "{{ k8s_seed }}"
+          register: k8s_upload_certs
+          changed_when: true
+          no_log: true
+
+        - name: Create a join token
+          ansible.builtin.command: kubeadm token create --ttl 30m --print-join-command
+          delegate_to: "{{ k8s_seed }}"
+          register: k8s_join_command
+          changed_when: true
+          no_log: true
+
+        - name: Join the cluster as control-plane node
+          ansible.builtin.command: >-
+            {{ k8s_join_command.stdout | trim }}
+            --control-plane
+            --certificate-key {{ k8s_upload_certs.stdout_lines | last | trim }}
+            --apiserver-advertise-address {{ node_ip }}
+            --node-name {{ inventory_hostname }}
+          args:
+            creates: /etc/kubernetes/kubelet.conf
+          no_log: true
+
+        - name: Record cluster membership
+          ansible.builtin.set_fact:
+            k8s_joined: true
+
+- name: Join worker nodes
+  hosts: workers
+  gather_facts: false
+  tasks:
+    - name: Join the cluster
+      when: not k8s_joined
+      block:
+        - name: Create a join token
+          ansible.builtin.command: kubeadm token create --ttl 30m --print-join-command
+          delegate_to: "{{ k8s_seed }}"
+          register: k8s_join_command
+          changed_when: true
+          no_log: true
+
+        - name: Join the cluster as worker node
+          ansible.builtin.command: "{{ k8s_join_command.stdout | trim }} --node-name {{ inventory_hostname }}"
+          args:
+            creates: /etc/kubernetes/kubelet.conf
+          no_log: true
+
+        - name: Record cluster membership
+          ansible.builtin.set_fact:
+            k8s_joined: true
+
+- name: Let control-plane nodes run workloads
+  hosts: control_plane
+  gather_facts: false
+  tasks:
+    - name: Remove the control-plane taint
+      ansible.builtin.command: >-
+        kubectl taint node {{ item }} node-role.kubernetes.io/control-plane:NoSchedule-
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      loop: "{{ groups['control_plane'] }}"
+      register: k8s_untaint
+      changed_when: "'untainted' in k8s_untaint.stdout"
+      failed_when: k8s_untaint.rc != 0 and 'not found' not in k8s_untaint.stderr
+      delegate_to: "{{ k8s_seed }}"
+      run_once: true
+
+- name: Install platform applications
+  ansible.builtin.import_playbook: platform.yml

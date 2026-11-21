@@ -1,0 +1,82 @@
+# The only way changes reach the servers. Every run waits for approval on the "production"
+# environment, and keeps its full log as an artifact.
+name: Run playbook
+run-name: >-
+  ${{ inputs.playbook || 'os-patch' }}${{ inputs.limit && format(' [{0}]', inputs.limit) || '' }}${{ inputs.check && ' (dry run)' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      playbook:
+        description: What to do
+        type: choice
+        required: true
+        options:
+          - site
+          - platform
+          - os-patch
+          - k8s-upgrade
+      limit:
+        description: Only these hosts (Ansible --limit, empty = all). Not allowed for "site".
+        type: string
+        default: ""
+      check:
+        description: Dry run (--check --diff). Only meaningful for os-patch and for site on an existing cluster.
+        type: boolean
+        default: false
+  schedule:
+    # Weekly OS patching, Sunday 03:00 UTC. Waits for approval like every other run.
+    - cron: "0 3 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 180
+    env:
+      PLAYBOOK: ${{ inputs.playbook || 'os-patch' }}
+      LIMIT: ${{ inputs.limit }}
+      CHECK: ${{ inputs.check }}
+      ANSIBLE_FORCE_COLOR: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ansible-setup
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-known-hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+      - name: Run playbooks/${{ env.PLAYBOOK }}.yml
+        run: |
+          args=()
+          [ -n "$LIMIT" ] && args+=(--limit "$LIMIT")
+          [ "$CHECK" = "true" ] && args+=(--check --diff)
+          set -o pipefail
+          ansible-playbook "playbooks/${PLAYBOOK}.yml" "${args[@]}" 2>&1 | tee ansible.log
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## ${PLAYBOOK}${LIMIT:+ (limit: $LIMIT)}$([ "$CHECK" = "true" ] && echo ' - dry run')"
+            echo "Commit \`${GITHUB_SHA}\`, started by @${GITHUB_ACTOR} (${GITHUB_EVENT_NAME})"
+            echo '```'
+            if [ -f ansible.log ]; then
+              sed 's/\x1b\[[0-9;]*m//g' ansible.log | sed -n '/PLAY RECAP/,$p' | head -60
+              sed 's/\x1b\[[0-9;]*m//g' ansible.log | grep -E '^(fatal|failed):' | head -40 || true
+            else
+              echo "playbook did not start"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ansible-log
+          path: ansible.log
+          if-no-files-found: ignore
+          retention-days: 90

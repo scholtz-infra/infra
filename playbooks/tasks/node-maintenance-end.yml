@@ -1,0 +1,25 @@
+- name: Wait for the node to be Ready
+  ansible.builtin.command: kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=60s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  delegate_to: "{{ kubectl_host }}"
+  register: maintenance_ready
+  changed_when: false
+  retries: 20
+  delay: 15
+  until: maintenance_ready.rc == 0
+
+- name: Put the node back into service
+  ansible.builtin.command: kubectl uncordon {{ inventory_hostname }}
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  delegate_to: "{{ kubectl_host }}"
+  register: maintenance_uncordon
+  changed_when: "'already uncordoned' not in maintenance_uncordon.stdout"
+
+- name: Wait for the whole cluster to be Ready before touching the next node
+  ansible.builtin.command: kubectl wait --for=condition=Ready nodes --all --timeout=300s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  delegate_to: "{{ kubectl_host }}"
+  changed_when: false

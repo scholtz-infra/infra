@@ -1,0 +1,45 @@
+# Cluster-wide settings. Versions are pinned here and bumped by PR (Renovate or by hand).
+ansible_user: root
+
+cluster_name: prod
+node_ip: "{{ ansible_host }}"
+
+# renovate: datasource=github-releases depName=kubernetes/kubernetes extractVersion=^v(?<version>.+)$
+kubernetes_version: "1.37.2"
+kubernetes_minor: "{{ kubernetes_version.split('.')[:2] | join('.') }}"
+
+# The API server is reached by every node through a HAProxy listening on localhost that balances
+# over all control-plane nodes. This is what makes the control plane HA without a floating IP.
+kube_api_internal_host: api.k8s.internal
+kube_api_lb_port: 7443
+# Optional public DNS name (A records -> control-plane IPs) for kubectl and app deployments from
+# GitHub Actions. Added to the API server certificate. Must be set before the cluster is created.
+kube_api_external_fqdn: ""
+
+pod_cidr: 10.244.0.0/16
+service_cidr: 10.96.0.0/12
+
+# Host firewall: TCP ports reachable from the internet. Everything else is only open between nodes.
+firewall_enabled: true
+firewall_public_tcp_ports: [22, 6443, 80, 443]
+
+# App repositories authenticate to the API server with their GitHub Actions OIDC token.
+# Only repositories owned by these GitHub users/orgs are accepted at all; what a repository may do
+# is defined in platform/tenants.yml.
+github_oidc_audience: "k8s-{{ cluster_name }}"
+github_oidc_allowed_owners:
+  - scholtz-infra
+
+# The node kubectl/helm commands are executed on (playbooks use the same default for their
+# `hosts:`). To use another node, pass it as extra var: -e kubectl_host=nodeX.
+kubectl_host: "{{ groups['control_plane'] | first }}"
+
+# Control-plane nodes that are already part of the cluster (fact set by the kubernetes role).
+k8s_joined_cps: >-
+  {{ groups['control_plane'] | map('extract', hostvars) | selectattr('k8s_joined', 'defined')
+     | selectattr('k8s_joined') | map(attribute='inventory_hostname') | list }}
+# Node used to hand out join credentials: an existing member, or the first control plane on day one.
+k8s_seed: "{{ (k8s_joined_cps + groups['control_plane']) | first }}"
+k8s_multi_node: "{{ groups['k8s_cluster'] | length > 1 }}"
+
+os_patch_reboot: true

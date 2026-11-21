@@ -1,0 +1,3 @@
+- name: Load firewall rules
+  ansible.builtin.command: /usr/sbin/nft -f /etc/nftables.conf
+  changed_when: true

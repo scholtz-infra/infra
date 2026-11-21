@@ -1,0 +1,10 @@
+# Take a node out of service. Skipped on a single-node cluster (nowhere to move pods to).
+- name: Drain the node
+  ansible.builtin.command: >-
+    kubectl drain {{ inventory_hostname }}
+    --ignore-daemonsets --delete-emptydir-data --timeout=900s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  delegate_to: "{{ kubectl_host }}"
+  changed_when: true
+  when: k8s_multi_node

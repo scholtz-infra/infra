@@ -1,0 +1,56 @@
+- name: Read the running kubelet version
+  ansible.builtin.command: kubelet --version
+  register: upgrade_kubelet
+  changed_when: false
+
+- name: Upgrade this node
+  when: upgrade_kubelet.stdout.split() | last != 'v' ~ kubernetes_version
+  vars:
+    upgrade_current_minor: "{{ (upgrade_kubelet.stdout.split() | last | regex_replace('^v', '')).split('.')[1] | int }}"
+    upgrade_target_minor: "{{ kubernetes_version.split('.')[1] | int }}"
+  block:
+    - name: Refuse to skip a minor version
+      ansible.builtin.assert:
+        that: (upgrade_target_minor | int) - (upgrade_current_minor | int) in [0, 1]
+        fail_msg: Kubernetes must be upgraded one minor version at a time and cannot be downgraded.
+
+    - name: Switch the package repository to the target minor version
+      ansible.builtin.include_role:
+        name: kubernetes
+        tasks_from: repo.yml
+
+    - name: Upgrade kubeadm
+      ansible.builtin.apt:
+        name: "kubeadm={{ kubernetes_version }}-*"
+        state: present
+        allow_change_held_packages: true
+
+    - name: Upgrade the control plane (first control-plane node)
+      ansible.builtin.command: kubeadm upgrade apply v{{ kubernetes_version }} --yes
+      changed_when: true
+      when: inventory_hostname == groups['control_plane'][0]
+
+    - name: Upgrade the node configuration
+      ansible.builtin.command: kubeadm upgrade node
+      changed_when: true
+      when: inventory_hostname != groups['control_plane'][0]
+
+    - name: Drain the node
+      ansible.builtin.include_tasks: node-maintenance-start.yml
+
+    - name: Upgrade kubelet and kubectl
+      ansible.builtin.apt:
+        name:
+          - "kubelet={{ kubernetes_version }}-*"
+          - "kubectl={{ kubernetes_version }}-*"
+        state: present
+        allow_change_held_packages: true
+
+    - name: Restart kubelet
+      ansible.builtin.systemd_service:
+        name: kubelet
+        state: restarted
+        daemon_reload: true
+
+    - name: Return the node to service
+      ansible.builtin.include_tasks: node-maintenance-end.yml
