@@ -19,4 +19,31 @@ encryption:
   type: wireguard
 
 operator:
+  rollOutPods: true
   replicas: {{ 2 if k8s_multi_node else 1 }}
+
+# Restart Cilium components when their configuration changes, so settings below take effect.
+rollOutCiliumPods: true
+envoy:
+  rollOutPods: true
+  securityContext:
+    capabilities:
+      # Envoy binds ports 80/443 on the host: chart defaults plus NET_BIND_SERVICE.
+      keepCapNetBindService: true
+      envoy:
+        - NET_ADMIN
+        - SYS_ADMIN
+        - NET_BIND_SERVICE
+
+# Ingress controller built into Cilium (IngressClass "cilium", the cluster default).
+# There is no cloud load balancer: Envoy listens on ports 80 and 443 of every node, and DNS
+# records point at the node IPs. One shared listener serves all Ingress resources.
+ingressController:
+  enabled: true
+  default: true
+  loadbalancerMode: shared
+  enforceHttps: true
+  hostNetwork:
+    enabled: true
+    httpPort: 80
+    httpsPort: 443

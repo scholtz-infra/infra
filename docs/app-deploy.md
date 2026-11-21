@@ -45,6 +45,38 @@ jobs:
       - run: kubectl apply -f k8s/
 ```
 
+## Exposing a website (Ingress and certificate)
+
+Ask for your namespace to be added to `network_web` in `platform/network.yml` of the infra
+repository, point the hostname at the cluster nodes in Cloudflare, then add an Ingress. The
+certificate is requested from Let's Encrypt automatically and renewed before it expires; HTTP is
+redirected to HTTPS.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-app
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt   # use letsencrypt-staging while testing
+spec:
+  ingressClassName: cilium
+  tls:
+    - hosts: [my-app.example.com]
+      secretName: my-app-tls
+  rules:
+    - host: my-app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: my-app
+                port:
+                  number: 80
+```
+
 ## Network isolation
 
 Pods in your namespace can talk to each other, to cluster DNS and to the internet. Nothing from

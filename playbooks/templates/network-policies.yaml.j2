@@ -38,6 +38,41 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+---
+# The ingress proxy itself may be reached from the internet. Which namespaces it may forward to
+# is decided per namespace below (network_web).
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: baseline-allow-world-to-ingress
+  labels:
+    {{ managed }}
+spec:
+  description: The ingress proxy accepts traffic from the internet and from the cluster
+  endpointSelector:
+    matchExpressions:
+      - key: reserved:ingress
+        operator: Exists
+  ingress:
+    - fromEntities:
+        - world
+        - cluster
+{% for namespace in network_web %}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-from-ingress
+  namespace: {{ namespace }}
+  labels:
+    {{ managed }}
+spec:
+  description: Pods in this namespace may receive web traffic through the ingress proxy
+  endpointSelector: {}
+  ingress:
+    - fromEntities:
+        - ingress
+{% endfor %}
 {% for namespace in network_namespaces %}
 ---
 apiVersion: networking.k8s.io/v1

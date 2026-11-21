@@ -24,7 +24,19 @@ ssh-keygen -t ed25519 -N "" -C infra-deploy -f ./infra-deploy
 Add the content of `infra-deploy` (private key) as secret `SSH_PRIVATE_KEY` to **both**
 environments, then delete the local file. Keep `infra-deploy.pub` for the next step.
 
-## 3. Server
+## 3. Cloudflare API token (certificates)
+
+In Cloudflare: *My Profile > API Tokens > Create Token*, template **Edit zone DNS**, limited to
+the zones (domains) your applications use. Permissions needed: `Zone / DNS / Edit` and
+`Zone / Zone / Read`. Add it as secret `CLOUDFLARE_API_TOKEN` to the `production` environment.
+cert-manager uses it only to create the temporary `_acme-challenge` TXT records that prove
+domain ownership to Let's Encrypt.
+
+DNS records for your applications stay under your control: point each hostname (or one wildcard
+record such as `*.example.com`) at the public IP of every cluster node, with the Cloudflare proxy
+either off (DNS only) or on with SSL mode "Full (strict)".
+
+## 4. Server
 
 1. Order the dedicated server in Hetzner Robot.
 2. Install the newest Ubuntu LTS with `installimage` from the rescue system: software RAID 1 over
@@ -37,14 +49,14 @@ environments, then delete the local file. Keep `infra-deploy.pub` for the next s
    ssh-keyscan -t ed25519 <server-ip>
    ```
 
-## 4. Inventory
+## 5. Inventory
 
 Open a pull request that replaces the placeholder address in
 `inventory/production/hosts.yml` with the server IP (or tell the agent the IP). Optionally set
 `kube_api_external_fqdn` in `inventory/production/group_vars/all.yml` to a DNS name pointing at
 the server; it must be set **before** the cluster is created to be included in the API certificate.
 
-## 5. Create the cluster
+## 6. Create the cluster
 
 After the pull request is merged: *Actions > Run playbook > Run workflow > site*, then approve the
 run. Or ask the agent to do it; it will dispatch the run, wait for your approval and supervise.

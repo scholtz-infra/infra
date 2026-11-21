@@ -40,6 +40,15 @@ Add `{to, from, ports}` to `network_allow` in `platform/network.yml` and run `pl
 the entry and re-running removes the access. Symptom of a missing entry: connections time out
 (packets are dropped, not rejected).
 
+## Expose a namespace to the internet
+
+Add the namespace to `network_web` in `platform/network.yml` and run `platform`. The application
+then needs an Ingress with `ingressClassName: cilium` and the annotation
+`cert-manager.io/cluster-issuer: letsencrypt` (example in `docs/app-deploy.md`). Symptoms:
+HTTP 403 from the ingress = namespace not in `network_web`; certificate stays not Ready =
+`kubectl describe challenge` in the app namespace, usually the Cloudflare token does not cover
+the zone or `CLOUDFLARE_API_TOKEN` is missing.
+
 ## Grant an application repository access
 
 Add `{namespace, repository}` to `platform/tenants.yml`, make sure the owner is in

@@ -10,7 +10,7 @@ infrastructure; the owner oversees it through pull requests, workflow approvals 
 |---|---|---|
 | Servers (Ubuntu, Hetzner dedicated) | Ansible roles | `roles/base`, `roles/firewall`, `roles/diskhealth` |
 | Kubernetes (vanilla, kubeadm, stacked etcd) | Ansible | `roles/containerd`, `roles/apilb`, `roles/kubernetes`, `playbooks/site.yml` |
-| In-cluster platform (Cilium, Longhorn, local-path, later Redis etc.) | Helm, driven by Ansible | `platform/releases.yml`, `platform/values/`, `playbooks/platform.yml` |
+| In-cluster platform (Cilium incl. ingress, cert-manager, Longhorn, local-path, later Redis etc.) | Helm, driven by Ansible | `platform/releases.yml`, `platform/values/`, `playbooks/platform.yml` |
 | Access for application repositories | GitHub OIDC + RBAC | `platform/tenants.yml`, `docs/app-deploy.md` |
 | Network access between namespaces | Cilium / Kubernetes network policies, deny-first | `platform/network.yml` |
 | OS patching, Kubernetes upgrades | Ansible, rolling, one node at a time | `playbooks/os-patch.yml`, `playbooks/k8s-upgrade.yml` |
@@ -36,9 +36,15 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   listed in `platform/network.yml`. Never widen the baseline policies in
   `playbooks/templates/network-policies.yaml.j2` without asking the owner. Outgoing traffic is
   not restricted. Tenant namespaces enforce the `baseline` pod security standard.
+- **Web traffic**: Cilium's built-in ingress controller (IngressClass `cilium`, classic Ingress
+  API) listens on ports 80/443 of every node; there is no load balancer, DNS A records point at
+  the node IPs and are managed by the owner in Cloudflare. cert-manager issues Let's Encrypt
+  certificates with the Cloudflare DNS-01 challenge (ClusterIssuers `letsencrypt` and
+  `letsencrypt-staging`). A namespace only receives web traffic if it is in `network_web`.
 - **Storage**: `longhorn` (default StorageClass, replicated across nodes once there are several)
   and `local-path` (node-local disk, fastest, pod is pinned to its node).
-- **Secrets** live in GitHub Environment secrets of this repo. Never commit a secret, never print
+- **Secrets** live in GitHub Environment secrets of this repo (`SSH_PRIVATE_KEY`,
+  `SSH_KNOWN_HOSTS`, `CLOUDFLARE_API_TOKEN`). Never commit a secret, never print
   one in a workflow log (`no_log: true` in Ansible).
 - **Versions are pinned** in `inventory/production/group_vars/all.yml` and
   `platform/releases.yml`, and move forward only by pull request (Renovate opens them).
@@ -109,8 +115,7 @@ Not built yet, in rough priority order. Tell the owner when one of them becomes 
 
 1. **etcd and volume backups off the server** (Hetzner Storage Box or S3). With one server there
    is currently no backup of cluster state.
-2. Ingress (Gateway API) and cert-manager, so applications can receive HTTPS traffic.
-3. Monitoring and alerting inside the cluster (Prometheus, alert delivery).
-4. Redis and other infrastructure applications, on request.
-5. Node removal playbook; Ubuntu release upgrades (e.g. 24.04 to 26.04) are manual so far.
-6. Optional: move secrets to Azure Key Vault with External Secrets Operator.
+2. Monitoring and alerting inside the cluster (Prometheus, alert delivery).
+3. Redis and other infrastructure applications, on request.
+4. Node removal playbook; Ubuntu release upgrades (e.g. 24.04 to 26.04) are manual so far.
+5. Optional: move secrets to Azure Key Vault with External Secrets Operator.

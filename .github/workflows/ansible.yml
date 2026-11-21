@@ -52,6 +52,8 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
           ssh-known-hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
       - name: Run playbooks/${{ env.PLAYBOOK }}.yml
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           args=()
           [ -n "$LIMIT" ] && args+=(--limit "$LIMIT")

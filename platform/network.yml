@@ -15,3 +15,8 @@ network_allow: []
 # - to: redis
 #   from: my-app
 #   ports: [6379]
+
+# Namespaces whose pods may receive web traffic from the internet through the ingress
+# (ports 80/443 on the nodes). An Ingress in a namespace that is not listed here answers 403.
+network_web: []
+# - my-app
