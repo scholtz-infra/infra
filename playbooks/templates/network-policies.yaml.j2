@@ -1,0 +1,83 @@
+{# Deny-first network policy for the whole cluster. See platform/network.yml. #}
+{% set managed = 'infra/managed-by: network-policies' %}
+# Puts every pod in the cluster into default-deny for incoming traffic. Only the nodes themselves
+# may connect (kubelet probes, API server webhooks, storage data path).
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: baseline-default-deny-ingress
+  labels:
+    {{ managed }}
+spec:
+  description: Default deny for incoming traffic, nodes excepted
+  endpointSelector: {}
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+        - kube-apiserver
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: baseline-allow-dns
+  labels:
+    {{ managed }}
+spec:
+  description: Cluster DNS is reachable from every pod and node
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: kube-system
+      k8s-app: kube-dns
+  ingress:
+    - fromEntities:
+        - cluster
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+{% for namespace in network_namespaces %}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: {{ namespace }}
+  labels:
+    {{ managed }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+{% endfor %}
+{% for rule in network_allow %}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-{{ rule.from }}
+  namespace: {{ rule.to }}
+  labels:
+    {{ managed }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ rule.from }}
+{% if rule.ports | default([]) %}
+      ports:
+{% for port in rule.ports %}
+        - port: {{ port }}
+          protocol: TCP
+{% endfor %}
+{% endif %}
+{% endfor %}

@@ -45,5 +45,13 @@ jobs:
       - run: kubectl apply -f k8s/
 ```
 
+## Network isolation
+
+Pods in your namespace can talk to each other, to cluster DNS and to the internet. Nothing from
+another namespace can reach them, and they cannot reach services in other namespaces (for example
+a shared Redis), until the pair is listed in `platform/network.yml` in the infra repository.
+Blocked connections time out. Pods must satisfy the `baseline` pod security standard (no host
+network, host paths or privileged containers).
+
 The token is valid for a few minutes, so log in at the start of the deploy job. Storage classes
 available to applications: `longhorn` (default, replicated) and `local-path` (node-local, fastest).

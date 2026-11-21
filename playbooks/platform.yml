@@ -6,11 +6,25 @@
   vars_files:
     - ../platform/releases.yml
     - ../platform/tenants.yml
+    - ../platform/network.yml
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
   vars:
     helm_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts['architecture']] }}"
+    # Every namespace that exists after this playbook; each gets the same-namespace allowance.
+    network_namespaces: >-
+      {{ (['default', 'kube-system', 'local-path-storage']
+          + (platform_releases | map(attribute='namespace') | list)
+          + (tenants | map(attribute='namespace') | list)) | unique }}
   tasks:
+    - name: Validate network access rules
+      ansible.builtin.assert:
+        that:
+          - item.to in network_namespaces
+          - item.from is string and item.from | length > 0
+        fail_msg: "platform/network.yml: 'to' must be a platform or tenant namespace and 'from' must be set"
+      loop: "{{ network_allow }}"
+
     - name: Check the installed Helm version
       ansible.builtin.command: /usr/local/bin/helm version --short
       register: platform_helm_installed
@@ -85,3 +99,22 @@
       register: platform_tenants
       changed_when: "'created' in platform_tenants.stdout or 'configured' in platform_tenants.stdout"
       when: tenants | length > 0
+
+    # Applied last so that every namespace exists. --prune removes access that is no longer
+    # listed in platform/network.yml.
+    - name: Render network policies
+      ansible.builtin.template:
+        src: network-policies.yaml.j2
+        dest: /etc/kubernetes/platform/network-policies.yaml
+        mode: "0600"
+
+    - name: Apply deny-first network policies
+      ansible.builtin.command: >-
+        kubectl apply -f /etc/kubernetes/platform/network-policies.yaml
+        --prune --selector infra/managed-by=network-policies
+        --prune-allowlist networking.k8s.io/v1/NetworkPolicy
+        --prune-allowlist cilium.io/v2/CiliumClusterwideNetworkPolicy
+      register: platform_network
+      changed_when: >-
+        'created' in platform_network.stdout or 'configured' in platform_network.stdout
+        or 'pruned' in platform_network.stdout

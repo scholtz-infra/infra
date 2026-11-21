@@ -6,6 +6,8 @@ metadata:
   name: {{ tenant.namespace }}
   labels:
     infra/tenant-repository: {{ tenant.repository | replace('/', '.') }}
+    # No host network, host paths or privileged pods: those would bypass the network policies.
+    pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

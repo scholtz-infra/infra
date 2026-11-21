@@ -12,6 +12,7 @@ infrastructure; the owner oversees it through pull requests, workflow approvals 
 | Kubernetes (vanilla, kubeadm, stacked etcd) | Ansible | `roles/containerd`, `roles/apilb`, `roles/kubernetes`, `playbooks/site.yml` |
 | In-cluster platform (Cilium, Longhorn, local-path, later Redis etc.) | Helm, driven by Ansible | `platform/releases.yml`, `platform/values/`, `playbooks/platform.yml` |
 | Access for application repositories | GitHub OIDC + RBAC | `platform/tenants.yml`, `docs/app-deploy.md` |
+| Network access between namespaces | Cilium / Kubernetes network policies, deny-first | `platform/network.yml` |
 | OS patching, Kubernetes upgrades | Ansible, rolling, one node at a time | `playbooks/os-patch.yml`, `playbooks/k8s-upgrade.yml` |
 | Health (SMART, RAID, updates, certificates, nodes, pods) | Daily workflow, opens an issue | `playbooks/health.yml`, `scripts/` |
 
@@ -30,6 +31,11 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 - **Network**: servers only have public IPs. The host firewall (nftables table `inet hostfw`)
   allows everything between cluster nodes and only `firewall_public_tcp_ports` from the internet.
   Cilium is the CNI, replaces kube-proxy, and encrypts pod traffic between nodes with WireGuard.
+- **Deny-first networking**: every pod only accepts traffic from its own namespace and from the
+  nodes; DNS is open. Traffic between namespaces, and from the internet, exists only if it is
+  listed in `platform/network.yml`. Never widen the baseline policies in
+  `playbooks/templates/network-policies.yaml.j2` without asking the owner. Outgoing traffic is
+  not restricted. Tenant namespaces enforce the `baseline` pod security standard.
 - **Storage**: `longhorn` (default StorageClass, replicated across nodes once there are several)
   and `local-path` (node-local disk, fastest, pod is pinned to its node).
 - **Secrets** live in GitHub Environment secrets of this repo. Never commit a secret, never print
@@ -73,7 +79,7 @@ Playbooks:
 - `site` - converge all servers: OS baseline, firewall, SMART monitoring, containerd, HAProxy,
   kubeadm; creates the cluster on first run, joins servers added to the inventory, then runs
   `platform`. Idempotent. Must not be limited away from control-plane nodes.
-- `platform` - Helm releases, local-path-provisioner, tenant namespaces and RBAC.
+- `platform` - Helm releases, local-path-provisioner, tenant namespaces and RBAC, network policies.
 - `os-patch` - `apt dist-upgrade` node by node; drain, reboot if required, uncordon.
 - `k8s-upgrade` - rolling kubeadm upgrade to `kubernetes_version`.
 
