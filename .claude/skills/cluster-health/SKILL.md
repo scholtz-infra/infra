@@ -13,8 +13,8 @@ description: Check the state of the servers and the Kubernetes cluster (SMART, R
 3. Interpret and act:
    - SMART failure, reallocated/pending sectors, NVMe media errors, degraded RAID: `replace-disk`.
    - Pending updates or reboot required: run `os-patch` (`run-workflow`).
-   - Certificate under 30 days: a Kubernetes upgrade renews them; otherwise propose a
-     `kubeadm certs renew all` playbook.
+   - Certificate under 30 days: run the `maintenance` playbook, it renews them.
+   - etcd problems (alarm, size, unhealthy member, old snapshot): `etcd` skill.
    - Node not Ready / unhealthy pods: download the artifact, identify the node or workload, then
      decide whether it is infrastructure (fix here) or an application (tell the owner).
    - Server unreachable: check the Hetzner status page and ask the owner to look at Robot.

@@ -50,7 +50,7 @@ def main():
         data = load_json(os.path.join(health_dir, f"node-{host}.json"))
         if data is None:
             problems.append(f"**{host}**: unreachable or the health probe failed")
-            rows.append(f"| {host} | unreachable | | | | | |")
+            rows.append(f"| {host} | unreachable | | | | | | |")
             continue
         problems += [f"**{host}**: {problem}" for problem in data["problems"]]
         disks = ", ".join(
@@ -60,10 +60,16 @@ def main():
             for d in data["disks"]
         )
         raid = ", ".join(f"{a['name']} [{a['state']}]" + (f" {a['resync']}" if a["resync"] else "") for a in data["mdraid"])
+        etcd = data.get("etcd")
+        etcd_text = "-"
+        if etcd:
+            local = max((m["db_size_mb"] for m in etcd["members"]), default=0)
+            age = etcd["snapshot_age_hours"]
+            etcd_text = f"{len(etcd['members'])} members, {local} MB, snapshot {'none' if age is None else f'{age:.0f}h ago'}"
         rows.append(
             f"| {host} | {data['os']} / {data['kernel']} | {data['uptime_days']}d "
             f"| {data['pending_updates']}{' (reboot required)' if data['reboot_required'] else ''} "
-            f"| {disks or 'none found'} | {raid or 'none'} | {data['certificates_min_days_left'] or '-'} |"
+            f"| {disks or 'none found'} | {raid or 'none'} | {data['certificates_min_days_left'] or '-'} | {etcd_text} |"
         )
 
     nodes = load_json(os.path.join(health_dir, "cluster-nodes.json"))
@@ -78,8 +84,8 @@ def main():
     print(f"**{'PROBLEMS FOUND' if problems else 'All healthy'}**\n")
     for problem in problems:
         print(f"- {problem}")
-    print("\n| Server | OS / kernel | Uptime | Pending updates | Disks | RAID | Cert days left |")
-    print("|---|---|---|---|---|---|---|")
+    print("\n| Server | OS / kernel | Uptime | Pending updates | Disks | RAID | Cert days left | etcd |")
+    print("|---|---|---|---|---|---|---|---|")
     print("\n".join(rows))
     if nodes:
         print("\n| Kubernetes node | Version | Ready |")

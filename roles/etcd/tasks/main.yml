@@ -1,0 +1,45 @@
+# Tooling for the etcd member that kubeadm runs on every control-plane node.
+- name: Install the etcd helper scripts
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/usr/local/sbin/{{ item }}"
+    mode: "0750"
+  loop:
+    - etcdctl
+    - etcd-snapshot
+
+- name: Install the snapshot service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/etcd-snapshot.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Save a local etcd snapshot
+      ConditionPathExists=/etc/kubernetes/manifests/etcd.yaml
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/etcd-snapshot
+
+- name: Install the snapshot timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/etcd-snapshot.timer
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Local etcd snapshot every 6 hours
+
+      [Timer]
+      OnCalendar=*-*-* 00/6:30:00
+      RandomizedDelaySec=10m
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+
+- name: Enable the snapshot timer
+  ansible.builtin.systemd_service:
+    name: etcd-snapshot.timer
+    enabled: true
+    state: started
+    daemon_reload: true

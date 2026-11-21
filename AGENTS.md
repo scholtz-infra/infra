@@ -14,7 +14,8 @@ infrastructure; the owner oversees it through pull requests, workflow approvals 
 | Access for application repositories | GitHub OIDC + RBAC | `platform/tenants.yml`, `docs/app-deploy.md` |
 | Network access between namespaces | Cilium / Kubernetes network policies, deny-first | `platform/network.yml` |
 | OS patching, Kubernetes upgrades | Ansible, rolling, one node at a time | `playbooks/os-patch.yml`, `playbooks/k8s-upgrade.yml` |
-| Health (SMART, RAID, updates, certificates, nodes, pods) | Daily workflow, opens an issue | `playbooks/health.yml`, `scripts/` |
+| etcd snapshots and defragmentation, certificate renewal, housekeeping | systemd timer on the nodes, monthly playbook | `roles/etcd`, `playbooks/maintenance.yml` |
+| Health (SMART, RAID, updates, certificates, etcd, nodes, pods) | Daily workflow, opens an issue | `playbooks/health.yml`, `scripts/` |
 
 Applications themselves are **not** deployed from here. They are deployed by GitHub Actions in
 their own repositories into the namespace granted in `platform/tenants.yml`.
@@ -84,7 +85,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 | Workflow | Trigger | Environment | Purpose |
 |---|---|---|---|
 | `Lint` (`lint.yml`) | PR, push to main | none | yamllint, ansible-lint, syntax check, unit tests |
-| `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch` | `production` (approval) | `site`, `platform`, `os-patch`, `k8s-upgrade` |
+| `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch`, monthly `maintenance` | `production` (approval) | `site`, `platform`, `os-patch`, `k8s-upgrade`, `maintenance` |
 | `Health check` (`health.yml`) | daily 05:17 UTC, manual | `monitoring` (no approval) | read-only report; opens/updates the `health-alert` issue |
 
 Playbooks:
@@ -95,6 +96,8 @@ Playbooks:
 - `platform` - Helm releases, local-path-provisioner, tenant namespaces and RBAC, network policies.
 - `os-patch` - `apt dist-upgrade` node by node; drain, reboot if required, uncordon.
 - `k8s-upgrade` - rolling kubeadm upgrade to `kubernetes_version`.
+- `maintenance` - etcd snapshot and defragmentation, kubeadm certificate renewal, housekeeping;
+  every step only acts when needed.
 
 ## How oversight works
 
@@ -115,13 +118,16 @@ Playbooks:
 | Upgrade Kubernetes | `k8s-upgrade` |
 | Add or update an infrastructure app (Redis, ...) | `platform-app` |
 | Replace a failed disk | `replace-disk` |
+| etcd: status, defragmentation, snapshots, member replacement, restore | `etcd` |
+| Monthly maintenance routine, "is anything due?" | `maintenance` |
 
 ## Known gaps / roadmap
 
 Not built yet, in rough priority order. Tell the owner when one of them becomes relevant.
 
-1. **etcd and volume backups off the server** (Hetzner Storage Box or S3). With one server there
-   is currently no backup of cluster state.
+1. **etcd and volume backups off the server** (Hetzner Storage Box or S3). etcd snapshots exist
+   only on the control-plane nodes themselves (`/var/backups/etcd`); losing the only server
+   loses the cluster state.
 2. Monitoring and alerting inside the cluster (Prometheus, alert delivery).
 3. Redis and other infrastructure applications, on request.
 4. Node removal playbook; Ubuntu release upgrades (e.g. 24.04 to 26.04) are manual so far.

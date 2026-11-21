@@ -14,6 +14,11 @@ import time
 
 DISK_USAGE_WARN_PERCENT = 85
 CERT_WARN_DAYS = 30
+ETCD_QUOTA_BYTES = 2 * 1024**3  # etcd default, kubeadm does not change it
+ETCD_SIZE_WARN_PERCENT = 70
+ETCD_SNAPSHOT_MAX_AGE_HOURS = 24
+ETCDCTL = "/usr/local/sbin/etcdctl"
+ETCD_SNAPSHOT_DIR = "/var/backups/etcd"
 NVME_WEAR_WARN_PERCENT = 90
 # ATA attributes where any non-zero raw value means the disk is on its way out.
 ATA_FAILURE_ATTRIBUTES = {
@@ -129,6 +134,64 @@ def parse_mdstat(text):
     return arrays
 
 
+def evaluate_etcd(status, health, alarms, snapshot_age_hours):
+    """Summarise `etcdctl endpoint status/health --cluster -w json` and `alarm list` output."""
+    problems = []
+    members = []
+    for entry in status or []:
+        info = entry.get("Status", {})
+        size = int(info.get("dbSize", 0))
+        members.append({
+            "endpoint": entry.get("Endpoint"),
+            "version": info.get("version"),
+            "db_size_mb": round(size / 1024**2),
+            "db_in_use_mb": round(int(info.get("dbSizeInUse", 0)) / 1024**2),
+            "leader": info.get("leader") == info.get("header", {}).get("member_id"),
+        })
+        if size * 100 >= ETCD_QUOTA_BYTES * ETCD_SIZE_WARN_PERCENT:
+            problems.append(f"etcd database on {entry.get('Endpoint')} is {round(size / 1024**2)} MB, "
+                            f"over {ETCD_SIZE_WARN_PERCENT}% of the quota: defragment (maintenance playbook)")
+    if not members:
+        problems.append("etcd status could not be read")
+    elif not any(member["leader"] for member in members):
+        problems.append("etcd has no leader")
+    for entry in health or []:
+        if not entry.get("health"):
+            problems.append(f"etcd member {entry.get('endpoint')} is unhealthy")
+    if health is not None and len(health) % 2 == 0:
+        problems.append(f"etcd has {len(health)} members: an even number cannot lose a member safely")
+    if alarms.strip():
+        problems.append(f"etcd alarm raised: {' '.join(alarms.split())}")
+    if snapshot_age_hours is None:
+        problems.append("no local etcd snapshot found")
+    elif snapshot_age_hours > ETCD_SNAPSHOT_MAX_AGE_HOURS:
+        problems.append(f"newest local etcd snapshot is {int(snapshot_age_hours)} hours old")
+    return {"members": members, "snapshot_age_hours": snapshot_age_hours, "problems": problems}
+
+
+def collect_etcd():
+    """Only on control-plane nodes of an existing cluster; None elsewhere."""
+    if not (os.path.exists(ETCDCTL) and os.path.exists("/etc/kubernetes/manifests/etcd.yaml")):
+        return None
+
+    def etcd_json(*args):
+        code, out = run([ETCDCTL, *args, "--write-out=json"])
+        try:
+            return json.loads(out) if code == 0 else None
+        except ValueError:
+            return None
+
+    _, alarms = run([ETCDCTL, "alarm", "list"])
+    snapshots = glob.glob(os.path.join(ETCD_SNAPSHOT_DIR, "etcd-*.db"))
+    age = (time.time() - max(os.path.getmtime(s) for s in snapshots)) / 3600 if snapshots else None
+    return evaluate_etcd(
+        etcd_json("endpoint", "status", "--cluster"),
+        etcd_json("endpoint", "health", "--cluster"),
+        alarms,
+        round(age, 1) if age is not None else None,
+    )
+
+
 def collect_filesystems():
     result = []
     seen = set()
@@ -177,6 +240,10 @@ def main():
         if cert["days_left"] < CERT_WARN_DAYS:
             problems.append(f"certificate {cert['path']} expires in {cert['days_left']} days")
 
+    etcd = collect_etcd()
+    if etcd:
+        problems += etcd["problems"]
+
     _, simulated = run(["apt-get", "-s", "-o", "Debug::NoLocking=true", "dist-upgrade"], timeout=120)
     with open("/proc/uptime", encoding="utf-8") as uptime:
         uptime_days = int(float(uptime.read().split()[0]) // 86400)
@@ -196,6 +263,7 @@ def main():
         "disks": disks,
         "mdraid": mdraid,
         "filesystems": filesystems,
+        "etcd": etcd,
         "certificates_min_days_left": min((c["days_left"] for c in certificates), default=None),
         "problems": problems,
     }))

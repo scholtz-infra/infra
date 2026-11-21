@@ -1,0 +1,23 @@
+#!/bin/bash
+# Managed by Ansible (roles/etcd).
+# Saves an etcd snapshot and the cluster PKI to /var/backups/etcd and keeps the newest
+# $ETCD_SNAPSHOT_KEEP of each. These are LOCAL copies: they protect against a broken etcd or a
+# bad change, not against losing the server.
+set -euo pipefail
+dir=/var/backups/etcd
+keep=${ETCD_SNAPSHOT_KEEP:-14}
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+tmp=/var/lib/etcd/snapshot-in-progress.db
+
+install -d -m 700 "$dir"
+rm -f "$tmp"
+/usr/local/sbin/etcdctl snapshot save "$tmp"
+mv "$tmp" "$dir/etcd-$stamp.db"
+tar -czf "$dir/pki-$stamp.tar.gz" -C /etc/kubernetes pki
+chmod 600 "$dir"/*
+
+for pattern in 'etcd-*.db' 'pki-*.tar.gz'; do
+  # shellcheck disable=SC2012,SC2086
+  ls -1t "$dir"/$pattern | tail -n +$((keep + 1)) | xargs -r rm -f
+done
+echo "saved $dir/etcd-$stamp.db"

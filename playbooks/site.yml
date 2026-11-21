@@ -46,6 +46,8 @@
     - containerd
     - apilb
     - kubernetes
+    - role: etcd
+      when: inventory_hostname in groups['control_plane']
 
 - name: Create the cluster on the first control-plane node
   hosts: control_plane

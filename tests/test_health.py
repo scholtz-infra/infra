@@ -78,6 +78,33 @@ class SmartTest(unittest.TestCase):
         self.assertEqual(result["problems"], ["8 reallocated sectors (attribute 5)"])
 
 
+class EtcdTest(unittest.TestCase):
+    @staticmethod
+    def member(endpoint, member_id, leader, size):
+        return {"Endpoint": endpoint, "Status": {
+            "header": {"member_id": member_id}, "leader": leader, "version": "3.6.0",
+            "dbSize": size, "dbSizeInUse": size // 2,
+        }}
+
+    def test_healthy(self):
+        status = [self.member("a", 1, 1, 50 * 1024**2), self.member("b", 2, 1, 50 * 1024**2),
+                  self.member("c", 3, 1, 50 * 1024**2)]
+        health = [{"endpoint": e, "health": True} for e in "abc"]
+        result = node_health.evaluate_etcd(status, health, "", 2.0)
+        self.assertEqual(result["problems"], [])
+        self.assertEqual([m["leader"] for m in result["members"]], [True, False, False])
+
+    def test_problems(self):
+        status = [self.member("a", 1, 1, 1900 * 1024**2), self.member("b", 2, 1, 10 * 1024**2)]
+        health = [{"endpoint": "a", "health": True}, {"endpoint": "b", "health": False}]
+        result = node_health.evaluate_etcd(status, health, "memberID:1 alarm:NOSPACE\n", 80)
+        self.assertEqual(len(result["problems"]), 5)
+
+    def test_unreadable(self):
+        result = node_health.evaluate_etcd(None, None, "", None)
+        self.assertEqual(len(result["problems"]), 2)
+
+
 class ClusterTest(unittest.TestCase):
     def test_pods(self):
         pods = "\n".join([

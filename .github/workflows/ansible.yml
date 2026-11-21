@@ -2,7 +2,7 @@
 # environment, and keeps its full log as an artifact.
 name: Run playbook
 run-name: >-
-  ${{ inputs.playbook || 'os-patch' }}${{ inputs.limit && format(' [{0}]', inputs.limit) || '' }}${{ inputs.check && ' (dry run)' || '' }}
+  ${{ inputs.playbook || (github.event.schedule == '0 4 1 * *' && 'maintenance' || 'os-patch') }}${{ inputs.limit && format(' [{0}]', inputs.limit) || '' }}${{ inputs.check && ' (dry run)' || '' }}
 
 on:
   workflow_dispatch:
@@ -16,6 +16,7 @@ on:
           - platform
           - os-patch
           - k8s-upgrade
+          - maintenance
       limit:
         description: Only these hosts (Ansible --limit, empty = all). Not allowed for "site".
         type: string
@@ -27,6 +28,8 @@ on:
   schedule:
     # Weekly OS patching, Sunday 03:00 UTC. Waits for approval like every other run.
     - cron: "0 3 * * 0"
+    # Monthly maintenance (etcd, certificates, housekeeping), 1st of the month 04:00 UTC.
+    - cron: "0 4 1 * *"
 
 permissions:
   contents: read
@@ -41,7 +44,7 @@ jobs:
     environment: production
     timeout-minutes: 180
     env:
-      PLAYBOOK: ${{ inputs.playbook || 'os-patch' }}
+      PLAYBOOK: ${{ inputs.playbook || (github.event.schedule == '0 4 1 * *' && 'maintenance' || 'os-patch') }}
       LIMIT: ${{ inputs.limit }}
       SSH_PORT: ${{ secrets.SSH_PORT }}
       CHECK: ${{ inputs.check }}
