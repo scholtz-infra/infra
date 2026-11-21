@@ -2,7 +2,9 @@
 # environment, and keeps its full log as an artifact.
 name: Run playbook
 run-name: >-
-  ${{ inputs.playbook || (github.event.schedule == '0 4 1 * *' && 'maintenance' || 'os-patch') }}${{ inputs.limit && format(' [{0}]', inputs.limit) || '' }}${{ inputs.check && ' (dry run)' || '' }}
+  ${{ inputs.playbook || (github.event.schedule == '0 4 1 * *' && 'maintenance' || 'os-patch') }}
+  ${{ inputs.limit && format('[{0}]', inputs.limit) || '' }}
+  ${{ inputs.check && '(dry run)' || '' }}
 
 on:
   workflow_dispatch:
