@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/ansible-setup

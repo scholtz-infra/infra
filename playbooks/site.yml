@@ -16,11 +16,32 @@
           --limit that excludes control-plane nodes.
       run_once: true
 
+- name: Detect servers that still use the default SSH port
+  hosts: k8s_cluster
+  gather_facts: false
+  tasks:
+    - name: Probe the configured SSH port
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ ssh_port | int }}"
+        timeout: 10
+      delegate_to: localhost
+      register: site_ssh_probe
+      failed_when: false
+      no_log: true
+
+    - name: Fall back to port 22 for a freshly installed server
+      ansible.builtin.set_fact:
+        ansible_port: 22
+      # wait_for only returns a message when it timed out
+      when: site_ssh_probe.msg is defined
+
 - name: Prepare nodes
   hosts: k8s_cluster
   roles:
     - base
     - firewall
+    - ssh
     - diskhealth
     - containerd
     - apilb
@@ -73,6 +94,7 @@
             --control-plane
             --certificate-key {{ k8s_upload_certs.stdout_lines | last | trim }}
             --apiserver-advertise-address {{ node_ip }}
+            --apiserver-bind-port {{ kube_api_port }}
             --node-name {{ inventory_hostname }}
           args:
             creates: /etc/kubernetes/kubelet.conf

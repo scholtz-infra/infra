@@ -1,5 +1,12 @@
 # Cluster-wide settings. Versions are pinned here and bumped by PR (Renovate or by hand).
 ansible_user: root
+# The SSH port is not written in this repository: it comes from the SSH_PORT secret of the GitHub
+# environments. A freshly installed server still listens on 22; the site playbook detects that
+# and moves sshd to the secret port (roles/ssh).
+ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) | int }}"
+ansible_port: "{{ ssh_port }}"
+# Host keys are stored under the inventory name, so they do not depend on the port or address.
+ansible_ssh_extra_args: "-o HostKeyAlias={{ inventory_hostname }}"
 
 cluster_name: prod
 node_ip: "{{ ansible_host }}"
@@ -12,6 +19,9 @@ kubernetes_minor: "{{ kubernetes_version.split('.')[:2] | join('.') }}"
 # over all control-plane nodes. This is what makes the control plane HA without a floating IP.
 kube_api_internal_host: api.k8s.internal
 kube_api_lb_port: 7443
+# Port the API servers listen on, on every control-plane node (instead of the default 6443).
+# Reachable from the internet (kubectl, application deployments). Fixed once the cluster exists.
+kube_api_port: 53831
 # Optional public DNS name (A records -> control-plane IPs) for kubectl and app deployments from
 # GitHub Actions. Added to the API server certificate. Must be set before the cluster is created.
 kube_api_external_fqdn: ""
@@ -19,9 +29,29 @@ kube_api_external_fqdn: ""
 pod_cidr: 10.244.0.0/16
 service_cidr: 10.96.0.0/12
 
-# Host firewall: TCP ports reachable from the internet. Everything else is only open between nodes.
-firewall_enabled: true
-firewall_public_tcp_ports: [22, 6443, 80, 443]
+# Web traffic enters through a Hetzner Cloud Load Balancer (managed by the owner in the Hetzner
+# console, see docs/setup.md): TCP 443 on the load balancer -> ingress_https_port on every node,
+# with PROXY protocol so applications see the real client address. Port 80 is not served.
+ingress_lb_ipv4: 167.235.110.199
+ingress_lb_ipv6: "2a01:4f8:1c1f:690b::1"
+ingress_https_port: 53443
+# Cilium always opens a plain HTTP listener as well; it is never reachable from outside the nodes.
+ingress_http_port: 53080
+ingress_proxy_protocol: true
+
+# Host firewall. From the internet only the SSH port and the API port are reachable; the ingress
+# port only from the load balancer. Everything else is only open between cluster nodes.
+firewall_public_tcp_ports:
+  - "{{ ssh_port }}"
+  - "{{ kube_api_port }}"
+firewall_ingress_sources:
+  - "{{ ingress_lb_ipv4 }}"
+# Listening ports inside the kernel's range for outgoing connections: keep them reserved.
+reserved_ports:
+  - "{{ ssh_port }}"
+  - "{{ kube_api_port }}"
+  - "{{ ingress_https_port }}"
+  - "{{ ingress_http_port }}"
 
 # App repositories authenticate to the API server with their GitHub Actions OIDC token.
 # Only repositories owned by these GitHub users/orgs are accepted at all; what a repository may do

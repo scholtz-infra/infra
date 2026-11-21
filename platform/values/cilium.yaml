@@ -26,24 +26,21 @@ operator:
 rollOutCiliumPods: true
 envoy:
   rollOutPods: true
-  securityContext:
-    capabilities:
-      # Envoy binds ports 80/443 on the host: chart defaults plus NET_BIND_SERVICE.
-      keepCapNetBindService: true
-      envoy:
-        - NET_ADMIN
-        - SYS_ADMIN
-        - NET_BIND_SERVICE
 
 # Ingress controller built into Cilium (IngressClass "cilium", the cluster default).
-# There is no cloud load balancer: Envoy listens on ports 80 and 443 of every node, and DNS
-# records point at the node IPs. One shared listener serves all Ingress resources.
+# Envoy listens on a high port of every node; the Hetzner load balancer forwards its port 443
+# there and the host firewall admits only the load balancer. One shared listener serves all
+# Ingress resources. The plain HTTP listener cannot be switched off but is not reachable from
+# outside the nodes.
 ingressController:
   enabled: true
   default: true
   loadbalancerMode: shared
   enforceHttps: true
+  # With this on, the listener ONLY accepts connections that start with a PROXY protocol header:
+  # "Proxy protocol" must be enabled on the load balancer service.
+  enableProxyProtocol: {{ ingress_proxy_protocol | bool | lower }}
   hostNetwork:
     enabled: true
-    httpPort: 80
-    httpsPort: 443
+    httpPort: {{ ingress_http_port }}
+    httpsPort: {{ ingress_https_port }}

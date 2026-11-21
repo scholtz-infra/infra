@@ -45,7 +45,9 @@ the entry and re-running removes the access. Symptom of a missing entry: connect
 Add the namespace to `network_web` in `platform/network.yml` and run `platform`. The application
 then needs an Ingress with `ingressClassName: cilium` and the annotation
 `cert-manager.io/cluster-issuer: letsencrypt` (example in `docs/app-deploy.md`). Symptoms:
-HTTP 403 from the ingress = namespace not in `network_web`; certificate stays not Ready =
+HTTP 403 from the ingress = namespace not in `network_web`; connection reset or timeout for every
+hostname = load balancer service (PROXY protocol on, destination `ingress_https_port`, target
+health) or the firewall source in `firewall_ingress_sources`; certificate stays not Ready =
 `kubectl describe challenge` in the app namespace, usually the Cloudflare token does not cover
 the zone or `CLOUDFLARE_API_TOKEN` is missing.
 

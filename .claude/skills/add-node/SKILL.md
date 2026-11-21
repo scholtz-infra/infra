@@ -6,8 +6,9 @@ description: Add a Hetzner dedicated server to the Kubernetes cluster (scale up)
 # Add a server to the cluster
 
 Needed from the owner: public IPv4 of the new server, and confirmation that it was installed
-according to `docs/setup.md` step 4 (Ubuntu LTS, RAID 1, deploy key for root) and that its
-`ssh-keyscan` line was appended to the `SSH_KNOWN_HOSTS` secret in both environments.
+according to `docs/setup.md` step 4 (Ubuntu LTS, RAID 1, deploy key for root, sshd still on port 22) and that its host
+key line, starting with the new inventory name, was appended to the `SSH_KNOWN_HOSTS` secret in
+both environments.
 
 1. Decide the role:
    - `control_plane` must stay at 1, 3 or 5 hosts. Going HA means adding **two** servers to
@@ -22,9 +23,9 @@ according to `docs/setup.md` step 4 (Ubuntu LTS, RAID 1, deploy key for root) an
 4. Run the health check: all nodes Ready, same kubelet version.
 5. When the cluster reaches 3 nodes, tell the owner that existing Longhorn volumes still have
    one replica: raise their replica count in the Longhorn UI or per volume, new volumes get 3.
-6. Remind the owner about DNS in Cloudflare: application hostnames need an A record for the new
-   node too (every node serves ports 80/443), and `kube_api_external_fqdn`, if used, one per new
-   control-plane node.
+6. Remind the owner to add the new server as IP target of the Hetzner load balancer
+   (`docs/setup.md` step 5), and, if `kube_api_external_fqdn` is used, a DNS A record for each
+   new control-plane node.
 
 Removing a node is destructive and not automated yet: ask the owner, then drain, `kubectl delete
 node`, and for control planes remove the etcd member first.

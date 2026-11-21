@@ -24,6 +24,10 @@ table inet hostfw {
     iifname "cilium_*" accept
     iifname "lxc*" accept
 
-    tcp dport { {{ firewall_public_tcp_ports | join(', ') }} } accept
+{# While a new server is still reached on port 22, keep 22 open until the next run. #}
+    tcp dport { {{ (firewall_public_tcp_ports + ([ansible_port] if ansible_port | int != ssh_port | int else [])) | map('int') | unique | join(', ') }} } accept
+
+    # web traffic: only from the Hetzner load balancer
+    ip saddr { {{ firewall_ingress_sources | join(', ') }} } tcp dport {{ ingress_https_port }} accept
   }
 }

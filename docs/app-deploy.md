@@ -18,7 +18,7 @@ The owner (`scholtz-infra`) must be listed in `github_oidc_allowed_owners`.
 
 ## 2. Workflow in the application repository
 
-Set two repository variables: `K8S_SERVER` (for example `https://k8s.example.com:6443`) and
+Set two repository variables: `K8S_SERVER` (for example `https://k8s.example.com:53831`) and
 `K8S_CA` (the cluster CA certificate, base64 encoded: the `certificate-authority-data` value of
 the cluster kubeconfig; it is not a secret).
 
@@ -48,9 +48,10 @@ jobs:
 ## Exposing a website (Ingress and certificate)
 
 Ask for your namespace to be added to `network_web` in `platform/network.yml` of the infra
-repository, point the hostname at the cluster nodes in Cloudflare, then add an Ingress. The
-certificate is requested from Let's Encrypt automatically and renewed before it expires; HTTP is
-redirected to HTTPS.
+repository, point the hostname at the load balancer in Cloudflare (`A 167.235.110.199`,
+`AAAA 2a01:4f8:1c1f:690b::1`), then add an Ingress. Only HTTPS on port 443 is served; there is
+no port 80. The
+certificate is requested from Let's Encrypt automatically and renewed before it expires.
 
 ```yaml
 apiVersion: networking.k8s.io/v1

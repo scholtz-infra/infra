@@ -22,7 +22,12 @@ ssh-keygen -t ed25519 -N "" -C infra-deploy -f ./infra-deploy
 ```
 
 Add the content of `infra-deploy` (private key) as secret `SSH_PRIVATE_KEY` to **both**
-environments, then delete the local file. Keep `infra-deploy.pub` for the next step.
+environments, then delete the local file. Keep `infra-deploy.pub` for the server installation.
+
+Choose the SSH port for all servers, a number between 20000 and 60999 that is not 53831, 53443 or
+53080, and add it as secret `SSH_PORT` to **both** environments. It is not stored in the
+repository. Servers are installed with the default port 22; the first `site` run moves sshd to
+this port and closes 22. Afterwards you connect with `ssh -p <port> root@<server-ip>`.
 
 ## 3. Cloudflare API token (certificates)
 
@@ -33,8 +38,9 @@ cert-manager uses it only to create the temporary `_acme-challenge` TXT records 
 domain ownership to Let's Encrypt.
 
 DNS records for your applications stay under your control: point each hostname (or one wildcard
-record such as `*.example.com`) at the public IP of every cluster node, with the Cloudflare proxy
-either off (DNS only) or on with SSL mode "Full (strict)".
+record such as `*.example.com`) at the load balancer, `A 167.235.110.199` and
+`AAAA 2a01:4f8:1c1f:690b::1`, with the Cloudflare proxy either off (DNS only) or on with SSL mode
+"Full (strict)".
 
 ## 4. Server
 
@@ -42,21 +48,37 @@ either off (DNS only) or on with SSL mode "Full (strict)".
 2. Install the newest Ubuntu LTS with `installimage` from the rescue system: software RAID 1 over
    both disks, no swap needed, hostname anything (Ansible sets it). Add your own public key and
    `infra-deploy.pub` to root's `authorized_keys`.
-3. Collect the host keys and store the output as secret `SSH_KNOWN_HOSTS` in **both** environments
-   (one block per server, append when servers are added):
+3. Collect the host key and store the output as secret `SSH_KNOWN_HOSTS` in **both** environments
+   (one line per server, append when servers are added). The line starts with the inventory name
+   of the server instead of its address, so it stays valid when the SSH port changes:
 
    ```bash
-   ssh-keyscan -t ed25519 <server-ip>
+   ssh-keyscan -t ed25519 <server-ip> | sed 's/^[^ ]*/node1/'
    ```
 
-## 5. Inventory
+## 5. Load balancer
+
+In the Hetzner Cloud console, on the load balancer 167.235.110.199 (it must be in the same
+account as the dedicated servers, and in an `eu-central` location):
+
+- **Targets**: add each cluster server as *IP* target (its public IPv4). Add new servers here
+  when the cluster grows.
+- **Service**: protocol **TCP**, listen port **443**, destination port **53443**,
+  **Proxy protocol: on**. No service on port 80.
+- **Health check**: TCP on port 53443.
+
+The servers accept the ingress port only from the load balancer's IPv4 address. If the health
+check stays red although the cluster is up, tell the agent: that address assumption has to be
+checked first.
+
+## 6. Inventory
 
 Open a pull request that replaces the placeholder address in
 `inventory/production/hosts.yml` with the server IP (or tell the agent the IP). Optionally set
 `kube_api_external_fqdn` in `inventory/production/group_vars/all.yml` to a DNS name pointing at
 the server; it must be set **before** the cluster is created to be included in the API certificate.
 
-## 6. Create the cluster
+## 7. Create the cluster
 
 After the pull request is merged: *Actions > Run playbook > Run workflow > site*, then approve the
 run. Or ask the agent to do it; it will dispatch the run, wait for your approval and supervise.

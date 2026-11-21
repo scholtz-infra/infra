@@ -43,6 +43,7 @@ jobs:
     env:
       PLAYBOOK: ${{ inputs.playbook || 'os-patch' }}
       LIMIT: ${{ inputs.limit }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
       CHECK: ${{ inputs.check }}
       ANSIBLE_FORCE_COLOR: "1"
     steps:
@@ -68,6 +69,8 @@ jobs:
             echo "Commit \`${GITHUB_SHA}\`, started by @${GITHUB_ACTOR} (${GITHUB_EVENT_NAME})"
             echo '```'
             if [ -f ansible.log ]; then
+              # the artifact is not masked by GitHub: keep the secret port out of it
+              [ -n "$SSH_PORT" ] && sed -i "s/\b${SSH_PORT}\b/***/g" ansible.log
               sed 's/\x1b\[[0-9;]*m//g' ansible.log | sed -n '/PLAY RECAP/,$p' | head -60
               sed 's/\x1b\[[0-9;]*m//g' ansible.log | grep -E '^(fatal|failed):' | head -40 || true
             else

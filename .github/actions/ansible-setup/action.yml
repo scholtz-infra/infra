@@ -5,7 +5,7 @@ inputs:
     description: Private key that is authorised for root on every server
     required: true
   ssh-known-hosts:
-    description: known_hosts lines for every server (ssh-keyscan output)
+    description: known_hosts lines for every server, keyed by inventory name (see docs/setup.md)
     required: true
 runs:
   using: composite

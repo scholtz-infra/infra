@@ -29,22 +29,28 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   `127.0.0.1:7443` balancing over all API servers. `controlPlaneEndpoint` is
   `api.k8s.internal:7443`, which resolves to 127.0.0.1 on every node.
 - **Network**: servers only have public IPs. The host firewall (nftables table `inet hostfw`)
-  allows everything between cluster nodes and only `firewall_public_tcp_ports` from the internet.
+  allows everything between cluster nodes; from the internet only the SSH port and the API port,
+  and the ingress port only from the load balancer.
+- **Non-standard ports**: API servers listen on `kube_api_port` (53831, not 6443). sshd listens
+  on a high port that exists only in the `SSH_PORT` secret: never write that number into the
+  repository, a PR, an issue or a log. New servers start on 22 and are moved by `site`.
   Cilium is the CNI, replaces kube-proxy, and encrypts pod traffic between nodes with WireGuard.
 - **Deny-first networking**: every pod only accepts traffic from its own namespace and from the
   nodes; DNS is open. Traffic between namespaces, and from the internet, exists only if it is
   listed in `platform/network.yml`. Never widen the baseline policies in
   `playbooks/templates/network-policies.yaml.j2` without asking the owner. Outgoing traffic is
   not restricted. Tenant namespaces enforce the `baseline` pod security standard.
-- **Web traffic**: Cilium's built-in ingress controller (IngressClass `cilium`, classic Ingress
-  API) listens on ports 80/443 of every node; there is no load balancer, DNS A records point at
-  the node IPs and are managed by the owner in Cloudflare. cert-manager issues Let's Encrypt
+- **Web traffic**: a Hetzner Cloud Load Balancer (167.235.110.199 / 2a01:4f8:1c1f:690b::1,
+  configured by the owner in the Hetzner console) forwards TCP 443 with PROXY protocol to
+  `ingress_https_port` on every node, where Cilium's built-in ingress controller (IngressClass
+  `cilium`, classic Ingress API) terminates TLS. Port 80 is not served anywhere. DNS records
+  point at the load balancer and are managed by the owner in Cloudflare. cert-manager issues Let's Encrypt
   certificates with the Cloudflare DNS-01 challenge (ClusterIssuers `letsencrypt` and
   `letsencrypt-staging`). A namespace only receives web traffic if it is in `network_web`.
 - **Storage**: `longhorn` (default StorageClass, replicated across nodes once there are several)
   and `local-path` (node-local disk, fastest, pod is pinned to its node).
 - **Secrets** live in GitHub Environment secrets of this repo (`SSH_PRIVATE_KEY`,
-  `SSH_KNOWN_HOSTS`, `CLOUDFLARE_API_TOKEN`). Never commit a secret, never print
+  `SSH_KNOWN_HOSTS`, `SSH_PORT`, `CLOUDFLARE_API_TOKEN`). Never commit a secret, never print
   one in a workflow log (`no_log: true` in Ansible).
 - **Versions are pinned** in `inventory/production/group_vars/all.yml` and
   `platform/releases.yml`, and move forward only by pull request (Renovate opens them).
@@ -82,7 +88,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 
 Playbooks:
 
-- `site` - converge all servers: OS baseline, firewall, SMART monitoring, containerd, HAProxy,
+- `site` - converge all servers: OS baseline, firewall, sshd port, SMART monitoring, containerd, HAProxy,
   kubeadm; creates the cluster on first run, joins servers added to the inventory, then runs
   `platform`. Idempotent. Must not be limited away from control-plane nodes.
 - `platform` - Helm releases, local-path-provisioner, tenant namespaces and RBAC, network policies.
