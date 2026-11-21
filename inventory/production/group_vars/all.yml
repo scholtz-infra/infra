@@ -20,18 +20,22 @@ kubernetes_minor: "{{ kubernetes_version.split('.')[:2] | join('.') }}"
 kube_api_internal_host: api.k8s.internal
 kube_api_lb_port: 7443
 # Port the API servers listen on, on every control-plane node (instead of the default 6443).
-# Reachable from the internet (kubectl, application deployments). Fixed once the cluster exists.
+# From outside it is reached through the load balancer. Fixed once the cluster exists.
 kube_api_port: 53831
-# Optional public DNS name (A records -> control-plane IPs) for kubectl and app deployments from
-# GitHub Actions. Added to the API server certificate. Must be set before the cluster is created.
-kube_api_external_fqdn: ""
+# Public name of the API for kubectl and application deployments from GitHub Actions:
+# https://k8s.biatec.io:53831. It resolves to the Hetzner load balancer, which forwards the port
+# to all control-plane nodes. Part of the API server certificate: fixed once the cluster exists.
+kube_api_external_fqdn: k8s.biatec.io
 
 pod_cidr: 10.244.0.0/16
 service_cidr: 10.96.0.0/12
 
-# Web traffic enters through a Hetzner Cloud Load Balancer (managed by the owner in the Hetzner
-# console, see docs/setup.md): TCP 443 on the load balancer -> ingress_https_port on every node,
-# with PROXY protocol so applications see the real client address. Port 80 is not served.
+# All traffic from the internet except SSH enters through a Hetzner Cloud Load Balancer (managed
+# by the owner in the Hetzner console, see docs/setup.md):
+#   - web: TCP 443 -> ingress_https_port on every node, with PROXY protocol so applications see
+#     the real client address. Port 80 is not served.
+#   - Kubernetes API: TCP kube_api_port -> kube_api_port on the control-plane nodes, no PROXY
+#     protocol.
 ingress_lb_ipv4: 167.235.110.199
 ingress_lb_ipv6: "2a01:4f8:1c1f:690b::1"
 ingress_https_port: 53443
@@ -39,13 +43,15 @@ ingress_https_port: 53443
 ingress_http_port: 53080
 ingress_proxy_protocol: true
 
-# Host firewall. From the internet only the SSH port and the API port are reachable; the ingress
-# port only from the load balancer. Everything else is only open between cluster nodes.
+# Host firewall. From the internet only the SSH port is reachable; the API and ingress ports only
+# from the load balancer. Everything else is only open between cluster nodes.
 firewall_public_tcp_ports:
   - "{{ ssh_port }}"
-  - "{{ kube_api_port }}"
-firewall_ingress_sources:
+firewall_lb_sources:
   - "{{ ingress_lb_ipv4 }}"
+firewall_lb_tcp_ports:
+  - "{{ kube_api_port }}"
+  - "{{ ingress_https_port }}"
 # Listening ports inside the kernel's range for outgoing connections: keep them reserved.
 reserved_ports:
   - "{{ ssh_port }}"

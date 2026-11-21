@@ -24,8 +24,7 @@ both environments.
 5. When the cluster reaches 3 nodes, tell the owner that existing Longhorn volumes still have
    one replica: raise their replica count in the Longhorn UI or per volume, new volumes get 3.
 6. Remind the owner to add the new server as IP target of the Hetzner load balancer
-   (`docs/setup.md` step 5), and, if `kube_api_external_fqdn` is used, a DNS A record for each
-   new control-plane node.
+   (`docs/setup.md` step 5). No DNS change is needed: all names point at the load balancer.
 
 Removing a node is destructive and not automated yet: ask the owner, then drain, `kubectl delete
 node`, and for control planes remove the etcd member first.

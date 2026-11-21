@@ -29,9 +29,10 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   `127.0.0.1:7443` balancing over all API servers. `controlPlaneEndpoint` is
   `api.k8s.internal:7443`, which resolves to 127.0.0.1 on every node.
 - **Network**: servers only have public IPs. The host firewall (nftables table `inet hostfw`)
-  allows everything between cluster nodes; from the internet only the SSH port and the API port,
-  and the ingress port only from the load balancer.
-- **Non-standard ports**: API servers listen on `kube_api_port` (53831, not 6443). sshd listens
+  allows everything between cluster nodes; from the internet only the SSH port; the API and
+  ingress ports only from the load balancer.
+- **Non-standard ports**: API servers listen on `kube_api_port` (53831, not 6443); the public API
+  address is `https://k8s.biatec.io:53831` through the load balancer. sshd listens
   on a high port that exists only in the `SSH_PORT` secret: never write that number into the
   repository, a PR, an issue or a log. New servers start on 22 and are moved by `site`.
   Cilium is the CNI, replaces kube-proxy, and encrypts pod traffic between nodes with WireGuard.
@@ -42,7 +43,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   not restricted. Tenant namespaces enforce the `baseline` pod security standard.
 - **Web traffic**: a Hetzner Cloud Load Balancer (167.235.110.199 / 2a01:4f8:1c1f:690b::1,
   configured by the owner in the Hetzner console) forwards TCP 443 with PROXY protocol to
-  `ingress_https_port` on every node, where Cilium's built-in ingress controller (IngressClass
+  `ingress_https_port` on every node (and TCP 53831 without PROXY protocol to the API servers), where Cilium's built-in ingress controller (IngressClass
   `cilium`, classic Ingress API) terminates TLS. Port 80 is not served anywhere. DNS records
   point at the load balancer and are managed by the owner in Cloudflare. cert-manager issues Let's Encrypt
   certificates with the Cloudflare DNS-01 challenge (ClusterIssuers `letsencrypt` and
@@ -50,7 +51,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 - **Storage**: `longhorn` (default StorageClass, replicated across nodes once there are several)
   and `local-path` (node-local disk, fastest, pod is pinned to its node).
 - **Secrets** live in GitHub Environment secrets of this repo (`SSH_PRIVATE_KEY`,
-  `SSH_KNOWN_HOSTS`, `SSH_PORT`, `CLOUDFLARE_API_TOKEN`). Never commit a secret, never print
+  `SSH_KNOWN_HOSTS`, `SSH_PORT`, `CLOUDFLARE_API_TOKEN`; list and formats in `docs/secrets.md`). Never commit a secret, never print
   one in a workflow log (`no_log: true` in Ansible).
 - **Versions are pinned** in `inventory/production/group_vars/all.yml` and
   `platform/releases.yml`, and move forward only by pull request (Renovate opens them).

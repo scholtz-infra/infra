@@ -2,6 +2,8 @@
 
 Steps only the owner can do. Everything else is done through pull requests and workflows.
 
+The complete list of secrets with example values is in [secrets.md](secrets.md).
+
 ## 1. Repository settings
 
 1. Consider making the repository **private**: the inventory contains the server IP addresses.
@@ -63,20 +65,24 @@ account as the dedicated servers, and in an `eu-central` location):
 
 - **Targets**: add each cluster server as *IP* target (its public IPv4). Add new servers here
   when the cluster grows.
-- **Service**: protocol **TCP**, listen port **443**, destination port **53443**,
-  **Proxy protocol: on**. No service on port 80.
-- **Health check**: TCP on port 53443.
+- **Service "web"**: protocol **TCP**, listen port **443**, destination port **53443**,
+  **Proxy protocol: on**, health check TCP on port 53443. No service on port 80.
+- **Service "kubernetes api"**: protocol **TCP**, listen port **53831**, destination port
+  **53831**, **Proxy protocol: off**, health check TCP on port 53831. When the cluster has
+  workers that are not control-plane nodes, their target shows unhealthy for this service; that
+  is expected.
 
-The servers accept the ingress port only from the load balancer's IPv4 address. If the health
+`k8s.biatec.io` must be a DNS-only record in Cloudflare (grey cloud): the Cloudflare proxy does
+not forward port 53831.
+
+The servers accept these two ports only from the load balancer's IPv4 address. If the health
 check stays red although the cluster is up, tell the agent: that address assumption has to be
 checked first.
 
 ## 6. Inventory
 
 Open a pull request that replaces the placeholder address in
-`inventory/production/hosts.yml` with the server IP (or tell the agent the IP). Optionally set
-`kube_api_external_fqdn` in `inventory/production/group_vars/all.yml` to a DNS name pointing at
-the server; it must be set **before** the cluster is created to be included in the API certificate.
+`inventory/production/hosts.yml` with the server IP (or tell the agent the IP). The API name `k8s.biatec.io` is already configured.
 
 ## 7. Create the cluster
 

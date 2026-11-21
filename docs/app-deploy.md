@@ -18,7 +18,7 @@ The owner (`scholtz-infra`) must be listed in `github_oidc_allowed_owners`.
 
 ## 2. Workflow in the application repository
 
-Set two repository variables: `K8S_SERVER` (for example `https://k8s.example.com:53831`) and
+Set two repository variables: `K8S_SERVER` (for example `https://k8s.biatec.io:53831`) and
 `K8S_CA` (the cluster CA certificate, base64 encoded: the `certificate-authority-data` value of
 the cluster kubeconfig; it is not a secret).
 
