@@ -90,3 +90,9 @@ network, host paths or privileged containers).
 
 The token is valid for a few minutes, so log in at the start of the deploy job. Storage classes
 available to applications: `longhorn` (default, replicated) and `local-path` (node-local, fastest).
+
+## The visitor's IP address
+
+The ingress adds the real client address to every request in the `X-Forwarded-For` header
+(and `X-Envoy-External-Address`). The TCP connection your pod sees comes from the ingress, so
+read the header, or switch on your framework's "trust proxy" / forwarded-headers setting.
