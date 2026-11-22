@@ -10,7 +10,7 @@ infrastructure; the owner oversees it through pull requests, workflow approvals 
 |---|---|---|
 | Servers (Ubuntu, Hetzner dedicated) | Ansible roles | `roles/base`, `roles/firewall`, `roles/diskhealth` |
 | Kubernetes (vanilla, kubeadm, stacked etcd) | Ansible | `roles/containerd`, `roles/apilb`, `roles/kubernetes`, `playbooks/site.yml` |
-| In-cluster platform (Cilium incl. ingress, cert-manager, Longhorn, local-path, Headlamp dashboard, later Redis etc.) | Helm, driven by Ansible | `platform/releases.yml`, `platform/values/`, `playbooks/platform.yml` |
+| In-cluster platform (Cilium incl. ingress, cert-manager, Longhorn, local-path, Headlamp dashboard, monitoring with Prometheus, Alertmanager and Grafana, later Redis etc.) | Helm, driven by Ansible | `platform/releases.yml`, `platform/values/`, `playbooks/platform.yml` |
 | Access for application repositories | GitHub OIDC + RBAC | `platform/tenants.yml`, `docs/app-deploy.md` |
 | Network access between namespaces | Cilium / Kubernetes network policies, deny-first | `platform/network.yml` |
 | OS patching, Kubernetes upgrades | Ansible, rolling, one node at a time | `playbooks/os-patch.yml`, `playbooks/k8s-upgrade.yml` |
@@ -155,7 +155,9 @@ Not built yet, in rough priority order. Tell the owner when one of them becomes 
 1. **etcd and volume backups off the server** (Hetzner Storage Box or S3). etcd snapshots exist
    only on the control-plane nodes themselves (`/var/backups/etcd`); losing the only server
    loses the cluster state.
-2. Monitoring and alerting inside the cluster (Prometheus, alert delivery).
+2. Alert delivery: Prometheus, Alertmanager and Grafana run (`docs/monitoring.md`), but
+   Alertmanager sends notifications nowhere until the owner names a destination. etcd,
+   scheduler and controller manager are not scraped.
 3. Redis and other infrastructure applications, on request.
 4. Node removal playbook; Ubuntu release upgrades (e.g. 24.04 to 26.04) are manual so far.
 5. Optional: move secrets to Azure Key Vault with External Secrets Operator.

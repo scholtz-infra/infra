@@ -1,0 +1,119 @@
+# Monitoring: Prometheus (collects metrics), Alertmanager (routes alerts) and Grafana
+# (dashboards), from the kube-prometheus-stack chart. See docs/monitoring.md.
+#
+# Only Grafana is reachable from the internet, at https://{{ grafana_fqdn }}. Prometheus and
+# Alertmanager have no login of their own and stay inside the cluster; both are used through
+# Grafana.
+
+# Keeps the monitoring CRDs in step with the chart on every upgrade (Helm itself never upgrades
+# CRDs).
+crds:
+  upgradeJob:
+    enabled: true
+
+defaultRules:
+  rules:
+    # Not scraped, see the four components switched off below.
+    etcd: false
+    kubeControllerManager: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeProxy: false
+    windows: false
+
+# kubeadm binds the metrics of these three to 127.0.0.1 on the control-plane nodes, where
+# Prometheus cannot reach them. etcd is watched by the daily health check instead.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+# Cilium replaces kube-proxy.
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    # Below the volume size, so the disk never fills up.
+    retentionSize: 40GB
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    # Also pick up ServiceMonitor, PodMonitor, PrometheusRule... objects that were not created by
+    # this chart, in any namespace: applications bring their own.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 200m
+        memory: 1Gi
+      limits:
+        memory: 4Gi
+
+alertmanager:
+  alertmanagerSpec:
+    # Silences and notification history survive a restart.
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+
+grafana:
+  # No adminPassword here: the chart generates a random one on the first installation and keeps
+  # it in the Secret "monitoring-grafana" (docs/monitoring.md).
+  ingress:
+    enabled: true
+    ingressClassName: cilium
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt
+    hosts:
+      - {{ grafana_fqdn }}
+    path: /
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - {{ grafana_fqdn }}
+  grafana.ini:
+    server:
+      domain: {{ grafana_fqdn }}
+      root_url: https://{{ grafana_fqdn }}/
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+      check_for_plugin_updates: false
+    users:
+      allow_sign_up: false
+  # Users, settings and dashboards created in the web interface survive a restart.
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 5Gi
+  # The volume can only be attached to one pod at a time.
+  deploymentStrategy:
+    type: Recreate
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
