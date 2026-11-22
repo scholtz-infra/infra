@@ -8,10 +8,10 @@
 #   - creates the user "infra" without a password (key login only)
 #   - installs the given public keys as the only way to log in as "infra"
 #   - lets "infra" use sudo without a password
-#   - moves sshd to <ssh-port> and switches password logins off
+#   - moves sshd to <ssh-port>; root and password logins stay allowed (owner's last resort)
 #
-# It can be run again, for example to add a key. Root login is not touched: root's own
-# authorized_keys keeps working, as the owner's last resort.
+# It can be run again, for example to add a key. Root's password and authorized_keys are not
+# touched: root can log in with either, as the owner's last resort.
 set -euo pipefail
 
 user=infra
@@ -64,7 +64,8 @@ fi
 umask 077
 cat > "$config" << EOF
 Port $port
-PasswordAuthentication no
+PasswordAuthentication yes
+PermitRootLogin yes
 KbdInteractiveAuthentication no
 EOF
 mkdir -p /run/sshd

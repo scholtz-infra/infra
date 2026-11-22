@@ -5,11 +5,16 @@ workflows can reach it. It takes about 15 minutes per server. Everything after t
 firewall, packages, Kubernetes) is done by the `site` playbook.
 
 The workflows log in as the user **`infra`** with an SSH key and become root with `sudo`. There is
-no password anywhere: `infra` has none, sudo does not ask for one, and sshd accepts keys only.
+no password involved: `infra` has none, so it can only log in with a key, and sudo does not ask
+for one.
 
 Root login stays possible for **you**, as a last resort, with the key in
-`/root/.ssh/authorized_keys`. Put only your own key there, never the deploy key: the workflows
-and the agent do not log in as root.
+`/root/.ssh/authorized_keys` or with the root password. Put only your own key there, never the
+deploy key: the workflows and the agent do not log in as root.
+
+Because password logins are allowed, the root password is reachable from the internet on the SSH
+port. Set a long random one (`passwd` as root, 20 characters or more from a password manager),
+and do not give a password to any other account.
 
 You need:
 
@@ -50,7 +55,7 @@ The script ([scripts/bootstrap-server.sh](../scripts/bootstrap-server.sh)):
 | Installs the public keys | `/home/infra/.ssh/authorized_keys` contains exactly the key files you passed |
 | Allows sudo without a password | `/etc/sudoers.d/90-infra`: `infra ALL=(ALL) NOPASSWD:ALL` |
 | Moves sshd to the SSH port | `/etc/ssh/sshd_config.d/10-infra-hardening.conf`, port 22 is closed |
-| Switches password logins off | Keys only, for every user |
+| Leaves root and password logins allowed | `PermitRootLogin yes`, `PasswordAuthentication yes`: your last resort |
 
 It can be run again later, for example to replace a key: pass all keys that should remain.
 
@@ -95,7 +100,7 @@ starts the `site` playbook and you approve the run.
 The first `site` run changes these things, so you do not have to:
 
 - hostname and `/etc/hosts` are set from the inventory name,
-- root login is left as it is: `ssh -p <ssh-port> root@<server-ip>` keeps working with your key,
+- root login is left as it is: `ssh -p <ssh-port> root@<server-ip>` keeps working with your key or the root password,
 - the host firewall is installed: from the internet only the SSH port answers,
 - swap is disabled, unattended security updates and SMART monitoring are set up,
 - containerd, HAProxy and Kubernetes are installed and the server joins the cluster.
