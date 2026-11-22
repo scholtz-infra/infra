@@ -1,0 +1,24 @@
+# Let's Encrypt issuers that prove domain ownership with a DNS record created through the
+# Cloudflare API (DNS-01). Works for any hostname in the zones the API token can edit, including
+# wildcards, and does not need the hostname to point at the cluster yet.
+{% for issuer in [
+  {'name': 'letsencrypt', 'server': 'https://acme-v02.api.letsencrypt.org/directory'},
+  {'name': 'letsencrypt-staging', 'server': 'https://acme-staging-v02.api.letsencrypt.org/directory'},
+] %}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ issuer.name }}
+spec:
+  acme:
+    server: {{ issuer.server }}
+    privateKeySecretRef:
+      name: {{ issuer.name }}-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+{% endfor %}

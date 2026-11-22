@@ -1,0 +1,33 @@
+#!/usr/sbin/nft -f
+# Managed by Ansible (roles/firewall). Only filters traffic addressed to the host itself.
+# Deliberately no "flush ruleset": Cilium and kubelet own other tables.
+table inet hostfw
+delete table inet hostfw
+
+table inet hostfw {
+  set cluster_nodes {
+    type ipv4_addr
+    elements = { {{ groups['k8s_cluster'] | map('extract', hostvars, 'node_ip') | join(', ') }} }
+  }
+
+  chain input {
+    type filter hook input priority filter; policy drop;
+
+    ct state established,related accept
+    iifname "lo" accept
+    meta l4proto { icmp, ipv6-icmp } accept
+
+    # node <-> node: kubelet, etcd, API server, VXLAN, WireGuard
+    ip saddr @cluster_nodes accept
+
+    # pods -> host (DNS, API server, kubelet, health checks)
+    iifname "cilium_*" accept
+    iifname "lxc*" accept
+
+{# While a new server is still reached on port 22, keep 22 open until the next run. #}
+    tcp dport { {{ (firewall_public_tcp_ports + ([ansible_port] if ansible_port | int != ssh_port | int else [])) | map('int') | unique | join(', ') }} } accept
+
+    # Kubernetes API and web traffic: only from the Hetzner load balancer
+    ip saddr { {{ firewall_lb_sources | join(', ') }} } tcp dport { {{ firewall_lb_tcp_ports | map('int') | join(', ') }} } accept
+  }
+}

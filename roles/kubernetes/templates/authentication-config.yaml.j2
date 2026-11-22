@@ -1,0 +1,17 @@
+# Managed by Ansible (roles/kubernetes). The API server reloads this file automatically.
+# A workflow in an allowed GitHub repository becomes the Kubernetes user "github:<owner>/<repo>".
+# It has no permissions until platform/tenants.yml binds it to a namespace.
+apiVersion: apiserver.config.k8s.io/v1
+kind: AuthenticationConfiguration
+jwt:
+  - issuer:
+      url: https://token.actions.githubusercontent.com
+      audiences:
+        - {{ github_oidc_audience }}
+    claimValidationRules:
+      - expression: 'claims.repository_owner in {{ github_oidc_allowed_owners | to_json }}'
+        message: repository owner is not allowed to access this cluster
+    claimMappings:
+      username:
+        claim: repository
+        prefix: "github:"

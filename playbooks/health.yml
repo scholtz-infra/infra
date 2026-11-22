@@ -1,0 +1,59 @@
+# Read-only. Collects disk (SMART, RAID), OS and cluster state into ./health/ for
+# scripts/health_report.py. Unreachable nodes simply produce no file and are reported as such.
+- name: Collect node health
+  hosts: k8s_cluster
+  gather_facts: false
+  tasks:
+    - name: Run the node health probe
+      ansible.builtin.script:
+        cmd: "{{ playbook_dir }}/../scripts/node_health.py"
+        executable: /usr/bin/python3
+      register: health_node
+      changed_when: false
+
+    - name: Save the result
+      ansible.builtin.copy:
+        content: "{{ health_node.stdout }}"
+        dest: "{{ playbook_dir }}/../health/node-{{ inventory_hostname }}.json"
+        mode: "0644"
+      delegate_to: localhost
+      changed_when: false
+
+- name: Collect cluster health
+  hosts: "{{ kubectl_host | default('control_plane[0]') }}"
+  gather_facts: false
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  tasks:
+    - name: Check whether the cluster exists
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: health_admin_conf
+
+    - name: Query the cluster
+      when: health_admin_conf.stat.exists
+      block:
+        - name: Get nodes
+          ansible.builtin.command: kubectl get nodes -o json
+          register: health_nodes
+          changed_when: false
+
+        - name: Get pods
+          ansible.builtin.command: >-
+            kubectl get pods --all-namespaces --no-headers
+            -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name,PHASE:.status.phase,READY:.status.containerStatuses[*].ready
+          register: health_pods
+          changed_when: false
+
+        - name: Save the result
+          ansible.builtin.copy:
+            content: "{{ item.content }}"
+            dest: "{{ playbook_dir }}/../health/{{ item.file }}"
+            mode: "0644"
+          loop:
+            - { file: cluster-nodes.json, content: "{{ health_nodes.stdout }}" }
+            - { file: cluster-pods.txt, content: "{{ health_pods.stdout }}" }
+          loop_control:
+            label: "{{ item.file }}"
+          delegate_to: localhost
+          changed_when: false

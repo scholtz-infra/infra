@@ -1,0 +1,58 @@
+- name: Configure the Kubernetes package repository
+  ansible.builtin.import_tasks: repo.yml
+
+- name: Check whether Kubernetes packages are installed
+  ansible.builtin.stat:
+    path: /usr/bin/kubeadm
+  register: kubernetes_kubeadm_bin
+
+# Only on first install. Version changes on existing nodes go through playbooks/k8s-upgrade.yml.
+- name: Install kubelet, kubeadm and kubectl
+  ansible.builtin.apt:
+    name:
+      - "kubelet={{ kubernetes_version }}-*"
+      - "kubeadm={{ kubernetes_version }}-*"
+      - "kubectl={{ kubernetes_version }}-*"
+    state: present
+  when: not kubernetes_kubeadm_bin.stat.exists
+
+- name: Hold Kubernetes packages so OS patching never upgrades them
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: [kubelet, kubeadm, kubectl]
+
+- name: Enable kubelet
+  ansible.builtin.systemd_service:
+    name: kubelet
+    enabled: true
+
+- name: Control-plane configuration
+  when: inventory_hostname in groups['control_plane']
+  block:
+    - name: Create the API server authentication config directory
+      ansible.builtin.file:
+        path: /etc/kubernetes/auth
+        state: directory
+        mode: "0755"
+
+    - name: Configure API server authentication (GitHub Actions OIDC)
+      ansible.builtin.template:
+        src: authentication-config.yaml.j2
+        dest: /etc/kubernetes/auth/authentication-config.yaml
+        mode: "0644"
+
+    - name: Write the kubeadm configuration
+      ansible.builtin.template:
+        src: kubeadm-config.yaml.j2
+        dest: /etc/kubernetes/kubeadm-config.yaml
+        mode: "0600"
+
+- name: Check whether this node is already part of a cluster
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubernetes_kubelet_conf
+
+- name: Record cluster membership
+  ansible.builtin.set_fact:
+    k8s_joined: "{{ kubernetes_kubelet_conf.stat.exists }}"

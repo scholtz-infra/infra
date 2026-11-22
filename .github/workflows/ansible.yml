@@ -1,0 +1,95 @@
+# The only way changes reach the servers. Every run waits for approval on the "production"
+# environment, and keeps its full log as an artifact. The environment exists for the approval
+# only: secrets are repository secrets.
+name: Run playbook
+run-name: >-
+  ${{ inputs.playbook || (github.event.schedule == '0 4 1 * *' && 'maintenance' || 'os-patch') }}
+  ${{ inputs.limit && format('[{0}]', inputs.limit) || '' }}
+  ${{ inputs.check && '(dry run)' || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      playbook:
+        description: What to do
+        type: choice
+        required: true
+        options:
+          - site
+          - platform
+          - os-patch
+          - k8s-upgrade
+          - maintenance
+      limit:
+        description: Only these hosts (Ansible --limit, empty = all). Not allowed for "site".
+        type: string
+        default: ""
+      check:
+        description: Dry run (--check --diff). Only meaningful for os-patch and for site on an existing cluster.
+        type: boolean
+        default: false
+  schedule:
+    # Weekly OS patching, Sunday 03:00 UTC. Waits for approval like every other run.
+    - cron: "0 3 * * 0"
+    # Monthly maintenance (etcd, certificates, housekeeping), 1st of the month 04:00 UTC.
+    - cron: "0 4 1 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 180
+    env:
+      PLAYBOOK: ${{ inputs.playbook || (github.event.schedule == '0 4 1 * *' && 'maintenance' || 'os-patch') }}
+      LIMIT: ${{ inputs.limit }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      NODE_IPS: ${{ secrets.NODE_IPS }}
+      CHECK: ${{ inputs.check }}
+      ANSIBLE_FORCE_COLOR: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ansible-setup
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-known-hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+          node-ips: ${{ secrets.NODE_IPS }}
+      - name: Run playbooks/${{ env.PLAYBOOK }}.yml
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          args=()
+          [ -n "$LIMIT" ] && args+=(--limit "$LIMIT")
+          [ "$CHECK" = "true" ] && args+=(--check --diff)
+          set -o pipefail
+          ansible-playbook "playbooks/${PLAYBOOK}.yml" "${args[@]}" 2>&1 | tee ansible.log
+      - name: Summary
+        if: always()
+        run: |
+          # the artifact is not masked by GitHub: keep server addresses and the SSH port out of it
+          [ -f ansible.log ] && python3 scripts/redact.py ansible.log
+          {
+            echo "## ${PLAYBOOK}${LIMIT:+ (limit: $LIMIT)}$([ "$CHECK" = "true" ] && echo ' - dry run')"
+            echo "Commit \`${GITHUB_SHA}\`, started by @${GITHUB_ACTOR} (${GITHUB_EVENT_NAME})"
+            echo '```'
+            if [ -f ansible.log ]; then
+              sed 's/\x1b\[[0-9;]*m//g' ansible.log | sed -n '/PLAY RECAP/,$p' | head -60
+              sed 's/\x1b\[[0-9;]*m//g' ansible.log | grep -E '^(fatal|failed):' | head -40 || true
+            else
+              echo "playbook did not start"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ansible-log
+          path: ansible.log
+          if-no-files-found: ignore
+          retention-days: 90

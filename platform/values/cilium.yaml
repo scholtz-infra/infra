@@ -1,0 +1,46 @@
+kubeProxyReplacement: true
+# local HAProxy on every node (roles/apilb)
+k8sServiceHost: 127.0.0.1
+k8sServicePort: {{ kube_api_lb_port }}
+
+routingMode: tunnel
+tunnelProtocol: vxlan
+
+ipam:
+  mode: cluster-pool
+  operator:
+    clusterPoolIPv4PodCIDRList:
+      - {{ pod_cidr }}
+    clusterPoolIPv4MaskSize: 24
+
+# Nodes only have public IPs: encrypt all pod traffic between nodes.
+encryption:
+  enabled: true
+  type: wireguard
+
+operator:
+  rollOutPods: true
+  replicas: {{ 2 if k8s_multi_node else 1 }}
+
+# Restart Cilium components when their configuration changes, so settings below take effect.
+rollOutCiliumPods: true
+envoy:
+  rollOutPods: true
+
+# Ingress controller built into Cilium (IngressClass "cilium", the cluster default).
+# Envoy listens on a high port of every node; the Hetzner load balancer forwards its port 443
+# there and the host firewall admits only the load balancer. One shared listener serves all
+# Ingress resources. The plain HTTP listener cannot be switched off but is not reachable from
+# outside the nodes.
+ingressController:
+  enabled: true
+  default: true
+  loadbalancerMode: shared
+  enforceHttps: true
+  # With this on, the listener ONLY accepts connections that start with a PROXY protocol header:
+  # "Proxy protocol" must be enabled on the load balancer service.
+  enableProxyProtocol: {{ ingress_proxy_protocol | bool | lower }}
+  hostNetwork:
+    enabled: true
+    httpPort: {{ ingress_http_port }}
+    httpsPort: {{ ingress_https_port }}

@@ -1,0 +1,52 @@
+- name: Add the Docker apt repository (source of containerd.io)
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: deb
+    uris: https://download.docker.com/linux/ubuntu
+    suites: "{{ ansible_facts['distribution_release'] }}"
+    components: stable
+    signed_by: https://download.docker.com/linux/ubuntu/gpg
+  register: containerd_repo
+
+- name: Install containerd
+  ansible.builtin.apt:
+    name: containerd.io
+    state: present
+    update_cache: "{{ containerd_repo is changed }}"
+
+- name: Configure containerd (CRI enabled, systemd cgroups)
+  ansible.builtin.copy:
+    dest: /etc/containerd/config.toml
+    mode: "0644"
+    content: |
+      # Managed by Ansible (roles/containerd). Everything not listed uses containerd defaults.
+      version = 3
+
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc]
+        runtime_type = 'io.containerd.runc.v2'
+
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc.options]
+        SystemdCgroup = true
+  notify: Restart containerd
+
+- name: Enable containerd
+  ansible.builtin.systemd_service:
+    name: containerd
+    enabled: true
+    state: started
+
+- name: Restart containerd if its configuration changed
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify that containerd uses the systemd cgroup driver
+  ansible.builtin.shell: set -o pipefail && containerd config dump | grep -q 'SystemdCgroup = true'
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Point crictl at containerd
+  ansible.builtin.copy:
+    dest: /etc/crictl.yaml
+    mode: "0644"
+    content: |
+      runtime-endpoint: unix:///run/containerd/containerd.sock

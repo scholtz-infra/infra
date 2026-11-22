@@ -1,0 +1,16 @@
+#!/bin/bash
+# Managed by Ansible (roles/etcd).
+# etcdctl of the etcd static pod running on this node, with the kubeadm client certificates.
+# Paths given to etcdctl are paths inside the container; /var/lib/etcd is shared with the host.
+set -euo pipefail
+container=$(crictl ps --name '^etcd$' --state Running -q | head -n1)
+if [ -z "$container" ]; then
+  echo "etcd container is not running on this node" >&2
+  exit 1
+fi
+exec crictl exec "$container" etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
+  --key=/etc/kubernetes/pki/etcd/healthcheck-client.key \
+  "$@"

@@ -1,0 +1,41 @@
+name: Ansible setup
+description: Installs Ansible and the SSH credentials needed to reach the servers.
+inputs:
+  ssh-private-key:
+    description: Private key that is authorised for the user infra on every server
+    required: true
+  ssh-known-hosts:
+    description: known_hosts lines for every server, keyed by inventory name (see docs/setup.md)
+    required: true
+  node-ips:
+    description: Server addresses, one "<inventory name> <public IPv4>" per line (see docs/secrets.md)
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: "3.14"
+        cache: pip
+    - name: Install Ansible
+      shell: bash
+      run: pip install --quiet -r requirements.txt
+    - name: Install SSH credentials
+      shell: bash
+      env:
+        SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
+        SSH_KNOWN_HOSTS: ${{ inputs.ssh-known-hosts }}
+        NODE_IPS: ${{ inputs.node-ips }}
+      run: |
+        if [ -z "$SSH_PRIVATE_KEY" ] || [ -z "$SSH_KNOWN_HOSTS" ] || [ -z "$NODE_IPS" ]; then
+          echo "::error::Secrets SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS and NODE_IPS must be set as repository secrets (see docs/secrets.md)"
+          exit 1
+        fi
+        # GitHub only hides the secret as a whole: hide every single address in the log as well.
+        while read -r _ address; do
+          [ -n "$address" ] && echo "::add-mask::$address"
+        done <<< "$NODE_IPS"
+        install -d -m 700 ~/.ssh
+        printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts

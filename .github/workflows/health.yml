@@ -1,0 +1,65 @@
+# Read-only daily check of disks (SMART, RAID), OS updates, certificates and cluster state.
+# Problems are reported in the issue labelled "health-alert".
+name: Health check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * *"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SSH_PORT: ${{ secrets.SSH_PORT }}
+      NODE_IPS: ${{ secrets.NODE_IPS }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/ansible-setup
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-known-hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+          node-ips: ${{ secrets.NODE_IPS }}
+      - name: Collect
+        run: |
+          mkdir -p health
+          ansible-inventory --list > health/inventory.json
+          # Unreachable nodes must not stop the report: they are reported by the next step.
+          ansible-playbook playbooks/health.yml || echo "::warning::health playbook exited with $?"
+      - name: Report
+        id: report
+        run: |
+          status=0
+          python3 scripts/health_report.py health health/inventory.json > report.md || status=$?
+          # the issue and the artifact are public: keep server addresses and the SSH port out
+          python3 scripts/redact.py report.md health
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Raise or update the alert issue
+        if: steps.report.outputs.status != '0'
+        run: |
+          gh label create health-alert --color B60205 --description "Raised by the health check" --force
+          printf '\n[Workflow run](%s/%s/actions/runs/%s)\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> report.md
+          issue=$(gh issue list --label health-alert --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body-file report.md
+          else
+            gh issue create --title "Infrastructure health problem" --label health-alert --body-file report.md
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: health
+          path: |
+            health/
+            report.md
+          retention-days: 30
+      - name: Fail when problems were found
+        if: steps.report.outputs.status != '0'
+        run: exit 1

@@ -1,0 +1,31 @@
+# Helm releases that make up the platform, installed in this order by playbooks/platform.yml.
+# To add an infrastructure application (Redis, ...): add an entry here plus a values file in
+# platform/values/<name>.yaml (a Jinja template, inventory variables are available).
+platform_releases:
+  - name: cilium
+    namespace: kube-system
+    repo: https://helm.cilium.io
+    chart: cilium
+    # renovate: datasource=helm registryUrl=https://helm.cilium.io depName=cilium
+    version: "1.20.5"
+
+  - name: longhorn
+    namespace: longhorn-system
+    repo: https://charts.longhorn.io
+    chart: longhorn
+    # renovate: datasource=helm registryUrl=https://charts.longhorn.io depName=longhorn
+    version: "1.13.0"
+
+  - name: cert-manager
+    namespace: cert-manager
+    repo: https://charts.jetstack.io
+    chart: cert-manager
+    # renovate: datasource=helm registryUrl=https://charts.jetstack.io depName=cert-manager
+    version: "v1.21.3"
+
+# renovate: datasource=github-releases depName=helm/helm extractVersion=^v(?<version>.+)$
+helm_version: "4.3.2"
+
+# Node-local volumes for workloads that need raw disk speed (StorageClass "local-path").
+# renovate: datasource=github-releases depName=rancher/local-path-provisioner extractVersion=^v(?<version>.+)$
+local_path_provisioner_version: "0.0.37"

@@ -1,0 +1,17 @@
+# Upgrades Kubernetes to kubernetes_version (inventory group_vars), one node at a time:
+# control-plane nodes first, then workers. Nodes already on the target version are skipped.
+- name: Upgrade control-plane nodes
+  hosts: control_plane
+  serial: 1
+  max_fail_percentage: 0
+  tasks:
+    - name: Upgrade
+      ansible.builtin.include_tasks: tasks/k8s-upgrade-node.yml
+
+- name: Upgrade worker nodes
+  hosts: workers
+  serial: 1
+  max_fail_percentage: 0
+  tasks:
+    - name: Upgrade
+      ansible.builtin.include_tasks: tasks/k8s-upgrade-node.yml

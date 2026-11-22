@@ -1,0 +1,10 @@
+crds:
+  enabled: true
+  # keep issued certificates if the chart is ever uninstalled
+  keep: true
+
+# DNS-01 with Cloudflare: verify the challenge record through Cloudflare's public resolvers
+# instead of the cluster DNS cache, so issuance does not wait on stale negative answers.
+extraArgs:
+  - --dns01-recursive-nameservers-only
+  - --dns01-recursive-nameservers=1.1.1.1:53,1.0.0.1:53

@@ -1,0 +1,112 @@
+# Scheduled maintenance (monthly, or on demand). Safe to run at any time: every step first checks
+# whether it is needed. Control-plane nodes are handled one at a time.
+#
+#   - etcd: snapshot, then defragment when more than etcd_defrag_threshold of the database file
+#     is free space
+#   - Kubernetes certificates: renew when they expire within cert_renew_days
+#   - every node: package cache, old journal entries, weekly SSD trim enabled
+- name: Control-plane maintenance
+  hosts: control_plane
+  serial: 1
+  max_fail_percentage: 0
+  gather_facts: false
+  vars:
+    etcd_defrag_threshold: 0.25
+    cert_renew_days: 60
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  tasks:
+    - name: Check whether this node runs a control plane
+      ansible.builtin.stat:
+        path: /etc/kubernetes/manifests/etcd.yaml
+      register: maint_etcd_manifest
+
+    - name: Maintain etcd and certificates
+      when: maint_etcd_manifest.stat.exists
+      block:
+        - name: Verify that every etcd member is healthy before starting
+          ansible.builtin.command: /usr/local/sbin/etcdctl endpoint health --cluster
+          changed_when: false
+
+        - name: Save an etcd snapshot
+          ansible.builtin.command: /usr/local/sbin/etcd-snapshot
+          changed_when: true
+
+        - name: Read the etcd database size
+          ansible.builtin.command: /usr/local/sbin/etcdctl endpoint status --write-out=json
+          register: maint_etcd_status
+          changed_when: false
+
+        - name: Calculate the reclaimable share
+          ansible.builtin.set_fact:
+            maint_etcd_db_size: "{{ (maint_etcd_status.stdout | from_json)[0].Status.dbSize | int }}"
+            maint_etcd_db_in_use: "{{ (maint_etcd_status.stdout | from_json)[0].Status.dbSizeInUse | int }}"
+
+        - name: Defragment this etcd member
+          ansible.builtin.command: /usr/local/sbin/etcdctl defrag --command-timeout=300s
+          changed_when: true
+          when: >-
+            (maint_etcd_db_size | int) > 0 and
+            ((maint_etcd_db_size | int) - (maint_etcd_db_in_use | int)) / (maint_etcd_db_size | int)
+            > (etcd_defrag_threshold | float)
+
+        - name: Check whether the Kubernetes certificates expire soon
+          ansible.builtin.command: >-
+            openssl x509 -noout -checkend {{ (cert_renew_days | int) * 86400 }}
+            -in /etc/kubernetes/pki/apiserver.crt
+          register: maint_cert_check
+          changed_when: false
+          failed_when: maint_cert_check.rc not in [0, 1]
+
+        - name: Renew certificates and restart the control plane
+          when: maint_cert_check.rc == 1
+          block:
+            - name: Renew all kubeadm certificates
+              ansible.builtin.command: kubeadm certs renew all
+              changed_when: true
+
+            # Static pods only load new certificates on start; kubelet restarts stopped containers.
+            - name: Restart the control-plane containers
+              ansible.builtin.shell: |
+                set -euo pipefail
+                for name in etcd kube-apiserver kube-controller-manager kube-scheduler; do
+                  crictl ps --name "^${name}$" -q | xargs -r crictl stop
+                done
+              args:
+                executable: /bin/bash
+              changed_when: true
+
+        - name: Wait for the API server
+          ansible.builtin.command: kubectl get --raw /readyz
+          register: maint_api_ready
+          changed_when: false
+          retries: 30
+          delay: 10
+          until: maint_api_ready.rc == 0
+
+        - name: Wait until every etcd member is healthy before the next node
+          ansible.builtin.command: /usr/local/sbin/etcdctl endpoint health --cluster
+          register: maint_etcd_health
+          changed_when: false
+          retries: 30
+          delay: 10
+          until: maint_etcd_health.rc == 0
+
+- name: Node housekeeping
+  hosts: k8s_cluster
+  gather_facts: false
+  tasks:
+    - name: Remove downloaded package files and packages that are no longer needed
+      ansible.builtin.apt:
+        clean: true
+        autoremove: true
+
+    - name: Remove journal entries older than 30 days
+      ansible.builtin.command: journalctl --vacuum-time=30d
+      changed_when: false
+
+    - name: Make sure the weekly SSD trim is enabled
+      ansible.builtin.systemd_service:
+        name: fstrim.timer
+        enabled: true
+        state: started

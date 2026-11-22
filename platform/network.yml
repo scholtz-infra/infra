@@ -1,0 +1,22 @@
+# Network access between namespaces. The cluster is deny-first:
+#
+#   - every pod accepts traffic only from pods in its own namespace and from the nodes
+#     (kubelet health checks, API server webhooks);
+#   - cluster DNS is reachable from everywhere;
+#   - anything else between namespaces, and anything from the internet, is dropped unless it is
+#     listed here.
+#
+# Outgoing traffic is not restricted: a connection is blocked by the receiving namespace.
+#
+# Each entry lets all pods of namespace `from` connect to all pods of namespace `to`, optionally
+# only on the given TCP ports. One entry per (to, from) pair. Apply with the `platform` playbook;
+# removing an entry removes the access.
+network_allow: []
+# - to: redis
+#   from: my-app
+#   ports: [6379]
+
+# Namespaces whose pods may receive web traffic from the internet through the ingress
+# (port 443 of the load balancer). An Ingress in a namespace that is not listed here answers 403.
+network_web: []
+# - my-app

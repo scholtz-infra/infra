@@ -1,0 +1,9 @@
+# Replicated storage, default StorageClass "longhorn".
+# Replica count follows the cluster size: 1 node -> 1 copy (no redundancy!), 3+ nodes -> 3 copies.
+defaultSettings:
+  defaultReplicaCount: {{ [groups['k8s_cluster'] | length, 3] | min }}
+  defaultDataPath: /var/lib/longhorn
+persistence:
+  defaultClass: true
+  defaultClassReplicaCount: {{ [groups['k8s_cluster'] | length, 3] | min }}
+  reclaimPolicy: Delete
