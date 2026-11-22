@@ -31,6 +31,9 @@ kube_api_port: "{{ lookup('ansible.builtin.env', 'K8S_API_PORT') | int }}"
 # cluster exists.
 kube_api_external_fqdn: k8s.biatec.io
 
+# Public name of the Headlamp dashboard (docs/dashboard.md). Must resolve to the load balancer.
+dashboard_fqdn: dashboard.k8s.biatec.io
+
 pod_cidr: 10.244.0.0/16
 service_cidr: 10.96.0.0/12
 

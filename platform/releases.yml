@@ -23,6 +23,14 @@ platform_releases:
     # renovate: datasource=helm registryUrl=https://charts.jetstack.io depName=cert-manager
     version: "v1.21.3"
 
+  # Web dashboard (docs/dashboard.md).
+  - name: headlamp
+    namespace: headlamp
+    repo: https://kubernetes-sigs.github.io/headlamp/
+    chart: headlamp
+    # renovate: datasource=helm registryUrl=https://kubernetes-sigs.github.io/headlamp/ depName=headlamp
+    version: "0.46.0"
+
 # renovate: datasource=github-releases depName=helm/helm extractVersion=^v(?<version>.+)$
 helm_version: "4.3.2"
 

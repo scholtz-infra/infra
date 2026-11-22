@@ -1,0 +1,54 @@
+# Headlamp dashboard, reachable from the internet at https://{{ dashboard_fqdn }}.
+#
+# Headlamp has no users of its own: everyone logs in with a Kubernetes token and sees exactly
+# what that token is allowed to do (docs/dashboard.md).
+replicaCount: 1
+
+# The chart would bind Headlamp's own service account to cluster-admin. It is not needed:
+# requests are made with the token of the logged-in user.
+clusterRoleBinding:
+  create: false
+
+ingress:
+  enabled: true
+  ingressClassName: cilium
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  hosts:
+    - host: {{ dashboard_fqdn }}
+      paths:
+        - path: /
+          type: Prefix
+  tls:
+    - secretName: headlamp-tls
+      hosts:
+        - {{ dashboard_fqdn }}
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+# The owner's login: tokens of this service account have full access to the cluster.
+extraManifests:
+  - |
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: headlamp-admin
+      namespace: headlamp
+  - |
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: headlamp-admin
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: cluster-admin
+    subjects:
+      - kind: ServiceAccount
+        name: headlamp-admin
+        namespace: headlamp
