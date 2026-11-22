@@ -1,0 +1,30 @@
+# Nothing here ever touches a filesystem that already exists: every volume is recognised by its
+# filesystem label and skipped when the label is present.
+- name: Install partitioning tools
+  ansible.builtin.apt:
+    name:
+      - mdadm
+      - gdisk
+      - parted
+    state: present
+
+- name: Create RAID volumes
+  ansible.builtin.include_tasks: array.yml
+  loop: "{{ storage_arrays }}"
+  loop_control:
+    loop_var: storage_array
+    label: "{{ storage_array.device }}"
+
+- name: Create volumes in the free space of disks
+  ansible.builtin.include_tasks: partition.yml
+  loop: "{{ storage_partitions }}"
+  loop_control:
+    loop_var: storage_partition
+    label: "{{ storage_partition.label }}"
+
+- name: Mount volumes
+  ansible.builtin.include_tasks: mount.yml
+  loop: "{{ storage_arrays + storage_partitions }}"
+  loop_control:
+    loop_var: storage_volume
+    label: "{{ storage_volume.mount }}"

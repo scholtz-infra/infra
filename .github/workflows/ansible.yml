@@ -20,6 +20,7 @@ on:
           - os-patch
           - k8s-upgrade
           - maintenance
+          - storage
       limit:
         description: Only these hosts (Ansible --limit, empty = all). Not allowed for "site".
         type: string

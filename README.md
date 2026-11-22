@@ -16,6 +16,7 @@ Kubernetes on Hetzner dedicated servers, managed by an AI agent and overseen by 
 | [AGENTS.md](AGENTS.md) | How the repo works, rules for the agent, workflows, roadmap |
 | [docs/dashboard.md](docs/dashboard.md) | The web dashboard and how to log in |
 | [docs/monitoring.md](docs/monitoring.md) | Grafana, metrics and alerts |
+| [docs/storage.md](docs/storage.md) | Data volumes on the servers |
 | [docs/app-deploy.md](docs/app-deploy.md) | Deploying an application from its own repository |
 
 Where to look to follow what is happening: merged pull requests (what changed), the

@@ -9,6 +9,7 @@ infrastructure; the owner oversees it through pull requests, workflow approvals 
 | Layer | How | Where |
 |---|---|---|
 | Servers (Ubuntu, Hetzner dedicated) | Ansible roles | `roles/base`, `roles/firewall`, `roles/diskhealth` |
+| Data volumes on the servers (`/mnt/...`) | Ansible | `roles/storage`, `inventory/production/host_vars/`, `playbooks/storage.yml`, `docs/storage.md` |
 | Kubernetes (vanilla, kubeadm, stacked etcd) | Ansible | `roles/containerd`, `roles/apilb`, `roles/kubernetes`, `playbooks/site.yml` |
 | In-cluster platform (Cilium incl. ingress, cert-manager, Longhorn, local-path, Headlamp dashboard, monitoring with Prometheus, Alertmanager and Grafana, later Redis etc.) | Helm, driven by Ansible | `platform/releases.yml`, `platform/values/`, `playbooks/platform.yml` |
 | Access for application repositories | GitHub OIDC + RBAC | `platform/tenants.yml`, `docs/app-deploy.md` |
@@ -109,7 +110,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 | Workflow | Trigger | Environment | Purpose |
 |---|---|---|---|
 | `Lint` (`lint.yml`) | PR, push to main | none | yamllint, ansible-lint, syntax check, unit tests |
-| `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch`, monthly `maintenance` | `production` | `site`, `platform`, `os-patch`, `k8s-upgrade`, `maintenance` |
+| `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch`, monthly `maintenance` | `production` | `site`, `platform`, `os-patch`, `k8s-upgrade`, `maintenance`, `storage` |
 | `Health check` (`health.yml`) | daily 05:17 UTC, manual | none (no approval) | read-only report; opens/updates the `health-alert` issue |
 
 Playbooks:
@@ -120,6 +121,8 @@ Playbooks:
 - `platform` - Helm releases, local-path-provisioner, tenant namespaces and RBAC, network policies.
 - `os-patch` - `apt dist-upgrade` node by node; drain, reboot if required, uncordon.
 - `k8s-upgrade` - rolling kubeadm upgrade to `kubernetes_version`.
+- `storage` - creates and mounts the data volumes listed per server in `host_vars`
+  (`docs/storage.md`); never touches a volume that already exists.
 - `maintenance` - etcd snapshot and defragmentation, kubeadm certificate renewal, housekeeping;
   every step only acts when needed.
 
