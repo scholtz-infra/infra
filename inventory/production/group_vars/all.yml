@@ -21,11 +21,14 @@ kubernetes_minor: "{{ kubernetes_version.split('.')[:2] | join('.') }}"
 kube_api_internal_host: api.k8s.internal
 kube_api_lb_port: 7443
 # Port the API servers listen on, on every control-plane node (instead of the default 6443).
-# From outside it is reached through the load balancer. Fixed once the cluster exists.
-kube_api_port: 53831
+# From outside it is reached on the same port through the load balancer. Like the SSH port it is
+# not written in this repository: it comes from the K8S_API_PORT repository secret. When the
+# secret changes, the next site run moves the API servers (roles/kubernetes).
+kube_api_port: "{{ lookup('ansible.builtin.env', 'K8S_API_PORT') | int }}"
 # Public name of the API for kubectl and application deployments from GitHub Actions:
-# https://k8s.biatec.io:53831. It resolves to the Hetzner load balancer, which forwards the port
-# to all control-plane nodes. Part of the API server certificate: fixed once the cluster exists.
+# https://k8s.biatec.io:<K8S_API_PORT>. It resolves to the Hetzner load balancer, which forwards
+# the port to all control-plane nodes. Part of the API server certificate: fixed once the
+# cluster exists.
 kube_api_external_fqdn: k8s.biatec.io
 
 pod_cidr: 10.244.0.0/16

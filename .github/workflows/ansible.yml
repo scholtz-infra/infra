@@ -50,6 +50,7 @@ jobs:
       PLAYBOOK: ${{ inputs.playbook || (github.event.schedule == '0 4 1 * *' && 'maintenance' || 'os-patch') }}
       LIMIT: ${{ inputs.limit }}
       SSH_PORT: ${{ secrets.SSH_PORT }}
+      K8S_API_PORT: ${{ secrets.K8S_API_PORT }}
       NODE_IPS: ${{ secrets.NODE_IPS }}
       CHECK: ${{ inputs.check }}
       ANSIBLE_FORCE_COLOR: "1"
@@ -72,7 +73,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          # the artifact is not masked by GitHub: keep server addresses and the SSH port out of it
+          # the artifact is not masked by GitHub: keep server addresses and the secret ports out of it
           [ -f ansible.log ] && python3 scripts/redact.py ansible.log
           {
             echo "## ${PLAYBOOK}${LIMIT:+ (limit: $LIMIT)}$([ "$CHECK" = "true" ] && echo ' - dry run')"

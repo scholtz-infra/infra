@@ -7,7 +7,7 @@ The complete list of secrets with example values is in [secrets.md](secrets.md).
 ## 1. Repository settings
 
 1. The repository can stay public: server addresses and the SSH port are only in secrets. The
-   load balancer address, the API name and the API port are in the repository.
+   load balancer address and the API name are in the repository.
 2. *Settings > Branches*: protect `main` (require a pull request, require the `lint` check).
 3. Optional, *Settings > Environments > production*: add yourself as **required reviewer** if
    every run that changes servers should wait for your click. Without a reviewer the agent
@@ -26,8 +26,8 @@ ssh-keygen -t ed25519 -N "" -C infra-deploy -f ./infra-deploy
 
 Add the content of `infra-deploy` (private key) as repository secret `SSH_PRIVATE_KEY`, then delete the local file. Keep `infra-deploy.pub` for the server preparation.
 
-Choose the SSH port for all servers, a number between 20000 and 60999 that is not 53831, 53443 or
-53080, and add it as repository secret `SSH_PORT`. It is not stored in the
+Choose the SSH port for all servers, a number between 20000 and 60999 that is not 53443, 53080
+or the API port, and add it as repository secret `SSH_PORT`. It is not stored in the
 repository. You set this port on every new server yourself (step 4); afterwards you connect with
 `ssh -p <port> infra@<server-ip>`.
 
@@ -59,13 +59,14 @@ account as the dedicated servers, and in an `eu-central` location):
   when the cluster grows.
 - **Service "web"**: protocol **TCP**, listen port **443**, destination port **53443**,
   **Proxy protocol: on**, health check TCP on port 53443. No service on port 80.
-- **Service "kubernetes api"**: protocol **TCP**, listen port **53831**, destination port
-  **53831**, **Proxy protocol: off**, health check TCP on port 53831. When the cluster has
+- **Service "kubernetes api"**: protocol **TCP**, listen port and destination port both the
+  number in the `K8S_API_PORT` secret, **Proxy protocol: off**, health check TCP on the same
+  port. When the cluster has
   workers that are not control-plane nodes, their target shows unhealthy for this service; that
   is expected.
 
 `k8s.biatec.io` must be a DNS-only record in Cloudflare (grey cloud): the Cloudflare proxy does
-not forward port 53831.
+not forward the API port.
 
 The servers accept these two ports only from the load balancer's IPv4 address. If the health
 check stays red although the cluster is up, tell the agent: that address assumption has to be

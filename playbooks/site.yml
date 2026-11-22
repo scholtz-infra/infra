@@ -9,11 +9,13 @@
         that:
           - groups['control_plane'] | length in [1, 3, 5]
           - groups['k8s_cluster'] | difference(node_ips.keys() | list) | length == 0
+          - kube_api_port | int > 1023
           - groups['control_plane'] | difference(ansible_play_hosts_all) | length == 0
         fail_msg: >-
           Inventory problem: control_plane must have 1, 3 or 5 hosts (etcd quorum), every host
-          needs a "<name> <address>" line in the NODE_IPS secret, and site.yml must not be run
-          with a --limit that excludes control-plane nodes.
+          needs a "<name> <address>" line in the NODE_IPS secret, the K8S_API_PORT secret must
+          hold the API port, and site.yml must not be run with a --limit that excludes
+          control-plane nodes.
       run_once: true
 
 - name: Detect servers that still use the default SSH port

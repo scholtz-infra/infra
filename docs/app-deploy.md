@@ -18,7 +18,9 @@ The owner (`scholtz-infra`) must be listed in `github_oidc_allowed_owners`.
 
 ## 2. Workflow in the application repository
 
-Set two repository variables: `K8S_SERVER` (for example `https://k8s.biatec.io:53831`) and
+Set the repository **secret** `K8S_SERVER` to `https://k8s.biatec.io:<api-port>` (the port is
+the value of the `K8S_API_PORT` secret of the infra repository; it is kept out of repositories
+and logs) and the repository variable
 `K8S_CA` (the cluster CA certificate, base64 encoded: the `certificate-authority-data` value of
 the cluster kubeconfig; it is not a secret).
 
@@ -38,7 +40,7 @@ jobs:
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=k8s-prod" | jq -r .value)
           echo "::add-mask::$token"
           echo "${{ vars.K8S_CA }}" | base64 -d > "$RUNNER_TEMP/ca.crt"
-          kubectl config set-cluster prod --server="${{ vars.K8S_SERVER }}" --certificate-authority="$RUNNER_TEMP/ca.crt"
+          kubectl config set-cluster prod --server="${{ secrets.K8S_SERVER }}" --certificate-authority="$RUNNER_TEMP/ca.crt"
           kubectl config set-credentials github --token="$token"
           kubectl config set-context prod --cluster=prod --user=github --namespace=my-app
           kubectl config use-context prod

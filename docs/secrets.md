@@ -10,6 +10,7 @@ workflows.
 | `SSH_KNOWN_HOSTS` | Run playbook, Health check | Verifies that Ansible talks to the real servers |
 | `NODE_IPS` | Run playbook, Health check | The public address of every server; kept out of the repository |
 | `SSH_PORT` | Run playbook, Health check | The port sshd listens on; kept out of the repository |
+| `K8S_API_PORT` | Run playbook, Health check | The port the Kubernetes API listens on; kept out of the repository |
 | `CLOUDFLARE_API_TOKEN` | Run playbook | cert-manager proves domain ownership to Let's Encrypt (DNS-01) |
 
 Repository secrets can be read by a workflow on any branch of this repository, so only give
@@ -68,11 +69,26 @@ addresses in their logs, in the health report and in the log artifacts.
 
 ## SSH_PORT
 
-Only the number. Between 20000 and 60999, and not 53831, 53443 or 53080 (used by the cluster).
+Only the number. Between 20000 and 60999, and not 53443, 53080 or the API port (used by the
+cluster).
 
 ```text
 41922
 ```
+
+## K8S_API_PORT
+
+Only the number: the port the Kubernetes API servers listen on, and the port of the
+"kubernetes api" service of the load balancer. Between 20000 and 60999, and not 53443, 53080 or
+the SSH port.
+
+```text
+51234
+```
+
+To change it later: update this secret, change the load balancer service to the new port, then
+run `site`. The API is unreachable for a short time while the API servers move, and application
+repositories need the new port in their `K8S_SERVER` secret.
 
 ## CLOUDFLARE_API_TOKEN
 
@@ -91,13 +107,14 @@ gh secret set SSH_PRIVATE_KEY < ./infra-deploy
 gh secret set SSH_KNOWN_HOSTS < ./known_hosts
 gh secret set NODE_IPS        < ./node_ips
 gh secret set SSH_PORT        --body "41922"
+gh secret set K8S_API_PORT    --body "51234"
 gh secret set CLOUDFLARE_API_TOKEN   # paste the token when asked
 ```
 
 ## Not secrets
 
 - Application repositories need no cluster credential: they log in with their GitHub OIDC token
-  (`docs/app-deploy.md`). Their `K8S_SERVER` (`https://k8s.biatec.io:53831`) and `K8S_CA`
-  values are repository *variables*.
-- The load balancer address, the API name and the API port are in the inventory.
+  (`docs/app-deploy.md`). Their `K8S_SERVER` contains the API port, so it is a secret there;
+  `K8S_CA` is a repository *variable*.
+- The load balancer address and the API name are in the inventory.
 - There is no sudo password: the user `infra` has no password and uses sudo without one.
