@@ -17,22 +17,24 @@ description: Perform or review the scheduled maintenance of the infrastructure -
 | Health check, raises `health-alert` issue | `Health check` workflow | daily |
 | Version update pull requests | Renovate | continuously |
 
-## What waits for the owner's approval
+## What runs on a schedule and changes servers
 
 | Run | Schedule | Does |
 |---|---|---|
 | `os-patch` | Sunday 03:00 UTC | all package updates, node by node, reboot if required |
 | `maintenance` | 1st of the month 04:00 UTC | etcd snapshot + defragmentation when worthwhile, kubeadm certificate renewal within 60 days of expiry, package cache and journal cleanup |
 
-Both appear as a `Run playbook` run waiting on the `production` environment. Remind the owner
-when one is pending; never approve it yourself.
+Both appear as a `Run playbook` run and start by themselves. Check their result afterwards
+(`gh run list --workflow ansible.yml --limit 5`) and report failures. If the owner has added a
+required reviewer to the `production` environment they wait there: remind the owner, never
+approve it yourself.
 
 ## Monthly routine for the agent
 
 1. `cluster-health`: start from a green health check; resolve or explain every open
    `health-alert` first.
-2. Pending runs: `gh run list --workflow ansible.yml --status waiting`. Tell the owner what is
-   waiting. After approval supervise it (`run-workflow`) and run the health check again.
+2. Scheduled runs: `gh run list --workflow ansible.yml --limit 10`. Read the result of every
+   run since the last routine, fix failures, and run the health check again.
    On a single-node cluster say beforehand that a reboot or a certificate renewal makes the API
    and the applications unavailable for a few minutes.
 3. Versions: list open Renovate PRs (`gh pr list --author app/renovate`). Per PR read the

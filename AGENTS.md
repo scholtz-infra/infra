@@ -71,14 +71,26 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 
 1. **Every change is a pull request.** Never push to `main`. One topic per PR, and the PR
    description says what will change on the servers and which workflow has to run after merge.
-2. **Servers are changed only by GitHub Actions** (`Run playbook` workflow). Do not SSH into
-   servers to change anything. Reading state for diagnosis is done with the `Health check`
-   workflow; if that is not enough, ask the owner before any direct access.
+   The agent merges its own pull request when `Lint` is green and the change follows what was
+   agreed with the owner in the conversation (rule 4).
+2. **Servers are changed only by GitHub Actions** (`Run playbook` workflow). Reading state is
+   done with the `Health check` workflow first. When that is not enough, the agent may log in
+   directly from the owner's machine **for debugging only**: `ssh <inventory name>` (the owner
+   keeps address, port, user `infra` and key in `~/.ssh/config`). On that connection only look:
+   read files, logs and command output (`lsblk`, `df`, `journalctl`, `systemctl status`,
+   `kubectl get`/`describe`, ...). Never change anything through it: no edits, installs,
+   restarts, `kubectl apply`/`delete`. A fix found this way goes through a pull request and a
+   workflow like any other change. Say in the conversation when the connection was used and
+   for what. Never copy the address or the port from that configuration anywhere.
 3. **Supervise what you start.** After dispatching a workflow, watch it to the end, read the log
    on failure, and report the outcome truthfully, including partial failures. Use the
    `run-workflow` skill.
-4. **The owner approves.** Runs of `Run playbook` wait for approval on the `production`
-   environment. Never try to bypass or self-approve. Say what is waiting for approval and why.
+4. **The owner approves in the conversation, not per run.** The owner does not want to review
+   every pull request or run: what was agreed in the conversation may be merged and executed
+   by the agent without asking again. Anything not discussed, anything that changes an
+   architecture decision above, and everything in rule 6 still needs the owner's answer first.
+   If the owner later adds a required reviewer to the `production` environment, runs wait
+   there: never try to bypass or self-approve that.
 5. **One node at a time.** Anything disruptive (reboot, upgrade, drain) is rolling with
    `serial: 1`. Never run a disruptive action while the health check reports a degraded cluster,
    unless that action is the fix.
@@ -95,7 +107,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 | Workflow | Trigger | Environment | Purpose |
 |---|---|---|---|
 | `Lint` (`lint.yml`) | PR, push to main | none | yamllint, ansible-lint, syntax check, unit tests |
-| `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch`, monthly `maintenance` | `production` (approval) | `site`, `platform`, `os-patch`, `k8s-upgrade`, `maintenance` |
+| `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch`, monthly `maintenance` | `production` | `site`, `platform`, `os-patch`, `k8s-upgrade`, `maintenance` |
 | `Health check` (`health.yml`) | daily 05:17 UTC, manual | none (no approval) | read-only report; opens/updates the `health-alert` issue |
 
 Playbooks:
@@ -114,8 +126,10 @@ Playbooks:
 - **What changed and why**: merged pull requests.
 - **What ran on the servers**: Actions history of `Run playbook`. Each run shows who started it,
   the commit, the play recap in the run summary, and keeps the full log as an artifact for 90 days.
-- **Approval**: the `production` environment requires the owner as reviewer. It holds no
-  secrets; it exists only for this approval.
+- **Approval**: given by the owner in the conversation with the agent (rule 4). The
+  `production` environment has no required reviewer, so runs, including the scheduled ones,
+  start without waiting. The owner can add themselves as reviewer there at any time to get a
+  click-to-approve step back.
 - **Problems**: the daily health check comments on the open `health-alert` issue.
 - The agent reports in the conversation what it dispatched, the run URL and the result.
 

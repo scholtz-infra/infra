@@ -14,8 +14,7 @@ workflows.
 
 Repository secrets can be read by a workflow on any branch of this repository, so only give
 write access to people (and agents) you trust with the servers. Pull requests from forks never
-receive them. The `production` environment holds no secrets; it only provides the approval step
-of `Run playbook` ([setup.md](setup.md) step 1).
+receive them. The `production` environment holds no secrets.
 
 All example values below are made up.
 

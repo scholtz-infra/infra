@@ -14,11 +14,12 @@ It runs from `main`, so the change must be merged first.
 2. Dispatch:
    ```bash
    gh workflow run ansible.yml -f playbook=<site|platform|os-patch|k8s-upgrade> [-f limit=<hosts>] [-f check=true]
-   gh workflow run health.yml          # read-only, no approval
+   gh workflow run health.yml          # read-only
    ```
 3. Find the run: `gh run list --workflow ansible.yml --limit 1 --json databaseId,status,url`.
-   Give the owner the URL and say that it is **waiting for their approval** (`production`
-   environment). Never approve it yourself.
+   Give the owner the URL. Runs start immediately unless the owner has added a required
+   reviewer to the `production` environment; then say that it is waiting for their approval
+   and never approve it yourself.
 4. Supervise: `gh run watch <id> --exit-status` (run it in the background for long playbooks).
 5. On failure: `gh run view <id> --log-failed`; the full log is the `ansible-log` artifact
    (`gh run download <id> -n ansible-log`). Find the first failed task, explain the cause, and fix
