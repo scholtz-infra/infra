@@ -68,6 +68,8 @@
 # server listens on, the static pod manifest is regenerated from the kubeadm configuration and
 # kubelet restarts the API server on the new port (a short API outage; on several control-plane
 # nodes all of them move in the same run). The firewall and HAProxy roles have already switched.
+# kubelet, controller manager and scheduler of a control-plane node talk to the API server of
+# their own node directly (not through HAProxy): their kubeconfigs carry the port as well.
 - name: Move the API server to the configured port
   when:
     - k8s_joined
@@ -87,18 +89,47 @@
       when: kubernetes_port_check.rc == 1
       changed_when: true
 
+    - name: Point the node-local kubeconfigs at the configured port
+      ansible.builtin.replace:
+        path: "/etc/kubernetes/{{ item }}"
+        regexp: '^(\s*server: https://{{ node_ip | regex_escape }}):\d+$'
+        replace: '\1:{{ kube_api_port }}'
+      loop:
+        - kubelet.conf
+        - controller-manager.conf
+        - scheduler.conf
+      register: kubernetes_kubeconfigs
+      no_log: true
+
+    - name: Decide whether the control plane has to be restarted
+      ansible.builtin.set_fact:
+        kubernetes_port_moved: "{{ kubernetes_port_check.rc == 1 or kubernetes_kubeconfigs is changed }}"
+
+    # Stopped containers of static pods are started again by kubelet with the new kubeconfig.
+    - name: Restart kubelet, controller manager and scheduler
+      ansible.builtin.shell: |
+        set -eo pipefail
+        systemctl restart kubelet
+        for name in kube-controller-manager kube-scheduler; do
+          crictl ps --name "^${name}$" -q | xargs -r crictl stop
+        done
+      args:
+        executable: /bin/bash
+      when: kubernetes_port_moved
+      changed_when: true
+
     - name: Wait for the API server on the configured port
       ansible.builtin.wait_for:
         host: "{{ node_ip }}"
         port: "{{ kube_api_port | int }}"
         timeout: 300
-      when: kubernetes_port_check.rc == 1
+      when: kubernetes_port_moved
       no_log: true
 
     - name: Store the kubeadm configuration in the cluster
       ansible.builtin.command: >-
         kubeadm init phase upload-config kubeadm --config /etc/kubernetes/kubeadm-config.yaml
-      when: kubernetes_port_check.rc == 1
+      when: kubernetes_port_moved
       register: kubernetes_upload_config
       changed_when: true
       retries: 30
