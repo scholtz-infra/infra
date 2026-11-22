@@ -9,10 +9,10 @@ The complete list of secrets with example values is in [secrets.md](secrets.md).
 1. The repository can stay public: server addresses and the SSH port are only in secrets. The
    load balancer address, the API name and the API port are in the repository.
 2. *Settings > Branches*: protect `main` (require a pull request, require the `lint` check).
-3. *Settings > Environments*: create two environments, both restricted to the `main` branch
-   (*Deployment branches and tags > Selected branches > main*):
-   - `production` - add yourself as **required reviewer**. Used by everything that changes servers.
-   - `monitoring` - no reviewer. Used by the read-only daily health check.
+3. *Settings > Environments*: create the environment `production`, add yourself as **required
+   reviewer** and restrict it to the `main` branch (*Deployment branches and tags > Selected
+   branches > main*). It holds no secrets: it is what makes every run that changes servers wait
+   for your approval. Without it those runs start immediately.
 4. Optional: install the [Renovate app](https://github.com/apps/renovate) on the repository to get
    version update pull requests.
 
@@ -24,11 +24,10 @@ Create a key pair that GitHub Actions uses to reach the servers. Run this on you
 ssh-keygen -t ed25519 -N "" -C infra-deploy -f ./infra-deploy
 ```
 
-Add the content of `infra-deploy` (private key) as secret `SSH_PRIVATE_KEY` to **both**
-environments, then delete the local file. Keep `infra-deploy.pub` for the server preparation.
+Add the content of `infra-deploy` (private key) as repository secret `SSH_PRIVATE_KEY`, then delete the local file. Keep `infra-deploy.pub` for the server preparation.
 
 Choose the SSH port for all servers, a number between 20000 and 60999 that is not 53831, 53443 or
-53080, and add it as secret `SSH_PORT` to **both** environments. It is not stored in the
+53080, and add it as repository secret `SSH_PORT`. It is not stored in the
 repository. You set this port on every new server yourself (step 4); afterwards you connect with
 `ssh -p <port> infra@<server-ip>`.
 
@@ -36,7 +35,7 @@ repository. You set this port on every new server yourself (step 4); afterwards 
 
 In Cloudflare: *My Profile > API Tokens > Create Token*, template **Edit zone DNS**, limited to
 the zones (domains) your applications use. Permissions needed: `Zone / DNS / Edit` and
-`Zone / Zone / Read`. Add it as secret `CLOUDFLARE_API_TOKEN` to the `production` environment.
+`Zone / Zone / Read`. Add it as repository secret `CLOUDFLARE_API_TOKEN`.
 cert-manager uses it only to create the temporary `_acme-challenge` TXT records that prove
 domain ownership to Let's Encrypt.
 

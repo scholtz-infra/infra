@@ -60,9 +60,9 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   the inventory holds names and groups only. Like the SSH port, never write a server address
   into the repository, a PR, an issue or a log. Files that leave the runner (log artifact,
   health report) pass through `scripts/redact.py`.
-- **Secrets** live in GitHub Environment secrets of this repo (`SSH_PRIVATE_KEY`,
-  `SSH_KNOWN_HOSTS`, `SSH_PORT`, `NODE_IPS`, `CLOUDFLARE_API_TOKEN`; list and formats in
-  `docs/secrets.md`). Never commit a secret, never print one in a workflow log (`no_log: true`
+- **Secrets** are GitHub repository secrets of this repo, by the owner's choice not split per
+  environment (`SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `SSH_PORT`, `NODE_IPS`,
+  `CLOUDFLARE_API_TOKEN`; list and formats in `docs/secrets.md`). Never commit a secret, never print one in a workflow log (`no_log: true`
   in Ansible).
 - **Versions are pinned** in `inventory/production/group_vars/all.yml` and
   `platform/releases.yml`, and move forward only by pull request (Renovate opens them).
@@ -96,7 +96,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 |---|---|---|---|
 | `Lint` (`lint.yml`) | PR, push to main | none | yamllint, ansible-lint, syntax check, unit tests |
 | `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch`, monthly `maintenance` | `production` (approval) | `site`, `platform`, `os-patch`, `k8s-upgrade`, `maintenance` |
-| `Health check` (`health.yml`) | daily 05:17 UTC, manual | `monitoring` (no approval) | read-only report; opens/updates the `health-alert` issue |
+| `Health check` (`health.yml`) | daily 05:17 UTC, manual | none (no approval) | read-only report; opens/updates the `health-alert` issue |
 
 Playbooks:
 
@@ -114,7 +114,8 @@ Playbooks:
 - **What changed and why**: merged pull requests.
 - **What ran on the servers**: Actions history of `Run playbook`. Each run shows who started it,
   the commit, the play recap in the run summary, and keeps the full log as an artifact for 90 days.
-- **Approval**: the `production` environment requires the owner as reviewer.
+- **Approval**: the `production` environment requires the owner as reviewer. It holds no
+  secrets; it exists only for this approval.
 - **Problems**: the daily health check comments on the open `health-alert` issue.
 - The agent reports in the conversation what it dispatched, the run URL and the result.
 

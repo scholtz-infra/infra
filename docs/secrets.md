@@ -1,19 +1,23 @@
 # GitHub secrets
 
-Every secret this repository uses. They are **environment secrets**
-(*Settings > Environments > production / monitoring > Environment secrets*), not repository
-secrets, so that only workflows running from `main` can read them.
+Every secret this repository uses. They are **repository secrets**
+(*Settings > Secrets and variables > Actions > Repository secrets*): one copy, used by all
+workflows.
 
-| Secret | `production` | `monitoring` | Used for |
-|---|---|---|---|
-| `SSH_PRIVATE_KEY` | yes | yes | Ansible logs in to the servers as user `infra` with this key |
-| `SSH_KNOWN_HOSTS` | yes | yes | Verifies that Ansible talks to the real servers |
-| `NODE_IPS` | yes | yes | The public address of every server; kept out of the repository |
-| `SSH_PORT` | yes | yes | The port sshd listens on; kept out of the repository |
-| `CLOUDFLARE_API_TOKEN` | yes | no | cert-manager proves domain ownership to Let's Encrypt (DNS-01) |
+| Secret | Used by | Used for |
+|---|---|---|
+| `SSH_PRIVATE_KEY` | Run playbook, Health check | Ansible logs in to the servers as user `infra` with this key |
+| `SSH_KNOWN_HOSTS` | Run playbook, Health check | Verifies that Ansible talks to the real servers |
+| `NODE_IPS` | Run playbook, Health check | The public address of every server; kept out of the repository |
+| `SSH_PORT` | Run playbook, Health check | The port sshd listens on; kept out of the repository |
+| `CLOUDFLARE_API_TOKEN` | Run playbook | cert-manager proves domain ownership to Let's Encrypt (DNS-01) |
 
-The values in `production` and `monitoring` must be identical. All example values below are
-made up.
+Repository secrets can be read by a workflow on any branch of this repository, so only give
+write access to people (and agents) you trust with the servers. Pull requests from forks never
+receive them. The `production` environment holds no secrets; it only provides the approval step
+of `Run playbook` ([setup.md](setup.md) step 1).
+
+All example values below are made up.
 
 ## SSH_PRIVATE_KEY
 
@@ -84,13 +88,11 @@ u7Hk2ExampleExampleExampleExample9xQ_pL
 ## Setting them from the command line
 
 ```bash
-for env in production monitoring; do
-  gh secret set SSH_PRIVATE_KEY --env "$env" < ./infra-deploy
-  gh secret set SSH_KNOWN_HOSTS --env "$env" < ./known_hosts
-  gh secret set NODE_IPS        --env "$env" < ./node_ips
-  gh secret set SSH_PORT        --env "$env" --body "41922"
-done
-gh secret set CLOUDFLARE_API_TOKEN --env production   # paste the token when asked
+gh secret set SSH_PRIVATE_KEY < ./infra-deploy
+gh secret set SSH_KNOWN_HOSTS < ./known_hosts
+gh secret set NODE_IPS        < ./node_ips
+gh secret set SSH_PORT        --body "41922"
+gh secret set CLOUDFLARE_API_TOKEN   # paste the token when asked
 ```
 
 ## Not secrets

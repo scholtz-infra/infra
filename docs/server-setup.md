@@ -73,7 +73,7 @@ session that is still open. If you are locked out completely, boot the rescue sy
 
 ## 4. Update the secrets
 
-Both secrets exist in the `production` and the `monitoring` environment and hold one line per
+Both are repository secrets and hold one line per
 server. GitHub cannot show a stored secret, so keep the complete text in your password manager
 and set the whole value again when a server is added. Formats and examples are in
 [secrets.md](secrets.md).

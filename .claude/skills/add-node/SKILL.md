@@ -8,7 +8,7 @@ description: Add a Hetzner dedicated server to the Kubernetes cluster (scale up)
 Needed from the owner: confirmation that the new server was prepared according to
 `docs/server-setup.md` (Ubuntu LTS, RAID 1, user `infra`, SSH port set, login tested) and that
 its lines, starting with the new inventory name, were added to the `NODE_IPS` and
-`SSH_KNOWN_HOSTS` secrets in both environments. Agree on the inventory name first. Do not ask
+`SSH_KNOWN_HOSTS` repository secrets. Agree on the inventory name first. Do not ask
 for the address: it must not appear in the repository, a PR or an issue.
 
 1. Decide the role:

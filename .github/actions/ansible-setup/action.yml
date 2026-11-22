@@ -28,7 +28,7 @@ runs:
         NODE_IPS: ${{ inputs.node-ips }}
       run: |
         if [ -z "$SSH_PRIVATE_KEY" ] || [ -z "$SSH_KNOWN_HOSTS" ] || [ -z "$NODE_IPS" ]; then
-          echo "::error::Secrets SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS and NODE_IPS must be set on this environment (see docs/secrets.md)"
+          echo "::error::Secrets SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS and NODE_IPS must be set as repository secrets (see docs/secrets.md)"
           exit 1
         fi
         # GitHub only hides the secret as a whole: hide every single address in the log as well.

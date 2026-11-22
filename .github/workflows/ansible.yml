@@ -1,5 +1,6 @@
 # The only way changes reach the servers. Every run waits for approval on the "production"
-# environment, and keeps its full log as an artifact.
+# environment, and keeps its full log as an artifact. The environment exists for the approval
+# only: secrets are repository secrets.
 name: Run playbook
 run-name: >-
   ${{ inputs.playbook || (github.event.schedule == '0 4 1 * *' && 'maintenance' || 'os-patch') }}

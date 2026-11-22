@@ -19,8 +19,8 @@ Platform apps are Helm releases listed in `platform/releases.yml`, installed in 
    Keep it minimal, comment every non-default choice.
 4. Storage: `longhorn` for data that must survive a server loss, `local-path` when the
    application replicates itself and needs raw disk speed (pods are then pinned to their node).
-5. Secrets (passwords): never in the values file. Add the secret to the `production`
-   environment (the owner does this), pass it to the playbook as an environment variable in
+5. Secrets (passwords): never in the values file. Add it as a repository secret
+   (the owner does this), pass it to the playbook as an environment variable in
    `.github/workflows/ansible.yml`, and create the Kubernetes Secret from Ansible with
    `no_log: true`; reference it from the chart via its `existingSecret` option.
 6. Network: the new namespace is closed to all other namespaces. Add one `network_allow` entry
