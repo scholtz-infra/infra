@@ -31,6 +31,14 @@ platform_releases:
     # renovate: datasource=helm registryUrl=https://kubernetes-sigs.github.io/headlamp/ depName=headlamp
     version: "0.46.0"
 
+  # Prometheus, Alertmanager and Grafana (docs/monitoring.md).
+  - name: monitoring
+    namespace: monitoring
+    repo: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    # renovate: datasource=helm registryUrl=https://prometheus-community.github.io/helm-charts depName=kube-prometheus-stack
+    version: "93.7.0"
+
 # renovate: datasource=github-releases depName=helm/helm extractVersion=^v(?<version>.+)$
 helm_version: "4.3.2"
 

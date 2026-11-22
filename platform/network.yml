@@ -11,7 +11,11 @@
 # Each entry lets all pods of namespace `from` connect to all pods of namespace `to`, optionally
 # only on the given TCP ports. One entry per (to, from) pair. Apply with the `platform` playbook;
 # removing an entry removes the access.
-network_allow: []
+network_allow:
+  # Prometheus collects the metrics of the cluster DNS.
+  - to: kube-system
+    from: monitoring
+    ports: [9153]
 # - to: redis
 #   from: my-app
 #   ports: [6379]
@@ -20,4 +24,5 @@ network_allow: []
 # (port 443 of the load balancer). An Ingress in a namespace that is not listed here answers 403.
 network_web:
   - headlamp # dashboard, docs/dashboard.md
+  - monitoring # Grafana, docs/monitoring.md
 # - my-app
