@@ -39,7 +39,7 @@ service_cidr: 10.96.0.0/12
 
 # All traffic from the internet except SSH enters through a Hetzner Cloud Load Balancer (managed
 # by the owner in the Hetzner console, see docs/setup.md):
-#   - web: TCP 443 -> ingress_https_port on every node, with PROXY protocol so applications see
+#   - web: TCP 443 -> ingress_https_port on every node, optionally with PROXY protocol so applications see
 #     the real client address. Port 80 is not served.
 #   - Kubernetes API: TCP kube_api_port -> kube_api_port on the control-plane nodes, no PROXY
 #     protocol.
@@ -48,7 +48,11 @@ ingress_lb_ipv6: "2a01:4f8:1c1f:690b::1"
 ingress_https_port: 53443
 # Cilium always opens a plain HTTP listener as well; it is never reachable from outside the nodes.
 ingress_http_port: 53080
-ingress_proxy_protocol: true
+# Must match "Proxy protocol" of the load balancer's web service exactly: a mismatch in either
+# direction breaks every website. It is off on the load balancer at the moment, so applications
+# see the load balancer as the client address. To get real client addresses, switch both on at
+# the same time: the load balancer service, then this value and a `platform` run.
+ingress_proxy_protocol: false
 # The load balancer's web service may also deliver to these ports on the nodes (its destination
 # port is 443 at the moment): connections from the load balancer to them are redirected to
 # ingress_https_port by the host firewall. Nothing listens on them and nobody else reaches them.

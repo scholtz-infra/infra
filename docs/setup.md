@@ -59,7 +59,9 @@ account as the dedicated servers, and in an `eu-central` location):
   when the cluster grows.
 - **Service "web"**: protocol **TCP**, listen port **443**, destination port **53443** (443
   also works: the servers redirect it to 53443 for connections from the load balancer),
-  **Proxy protocol: on**, health check TCP on the destination port. No service on port 80.
+  **Proxy protocol: off**, health check TCP on the destination port. No service on port 80.
+  Proxy protocol can be switched on to give applications the real client address, but only
+  together with `ingress_proxy_protocol` in the inventory: tell the agent first.
 - **Service "kubernetes api"**: protocol **TCP**, listen port and destination port both the
   number in the `K8S_API_PORT` secret, **Proxy protocol: off**, health check TCP on the same
   port. When the cluster has

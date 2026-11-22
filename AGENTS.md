@@ -44,7 +44,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   `playbooks/templates/network-policies.yaml.j2` without asking the owner. Outgoing traffic is
   not restricted. Tenant namespaces enforce the `baseline` pod security standard.
 - **Web traffic**: a Hetzner Cloud Load Balancer (167.235.110.199 / 2a01:4f8:1c1f:690b::1,
-  configured by the owner in the Hetzner console) forwards TCP 443 with PROXY protocol to
+  configured by the owner in the Hetzner console) forwards TCP 443 (PROXY protocol on or off, matching `ingress_proxy_protocol`) to
   `ingress_https_port` on every node, or to 443, which the host firewall redirects there for
   the load balancer only (and the API port without PROXY protocol to the API servers), where Cilium's built-in ingress controller (IngressClass `cilium`, classic Ingress
   API) terminates TLS. Port 80 is not served anywhere. DNS records
