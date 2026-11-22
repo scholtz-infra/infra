@@ -1,0 +1,40 @@
+- name: "Look for the filesystem {{ storage_partition.label }}"
+  ansible.builtin.command: blkid -L {{ storage_partition.label | quote }}
+  register: storage_partition_fs
+  changed_when: false
+  failed_when: storage_partition_fs.rc not in [0, 2]
+  check_mode: false
+
+# The new partition takes the largest unpartitioned block of the disk; existing partitions are
+# not moved or resized. Signatures of an earlier installation inside that block are removed.
+- name: "Create the partition and filesystem {{ storage_partition.label }}"
+  when: storage_partition_fs.rc == 2
+  ansible.builtin.shell: |
+    set -euo pipefail
+    disk={{ storage_partition.disk | quote }}
+    label={{ storage_partition.label | quote }}
+    part=/dev/disk/by-partlabel/$label
+    [ -b "$disk" ] || { echo "$disk does not exist"; exit 1; }
+    if [ ! -e "$part" ]; then
+      sgdisk -n 0:0:0 -t 0:8300 -c 0:"$label" "$disk"
+      partprobe "$disk" || partx -u "$disk"
+      udevadm settle
+    fi
+    [ -b "$part" ] || { echo "the new partition did not appear"; exit 1; }
+    [ "$(lsblk -ndo PKNAME "$part")" = "$(basename "$(readlink -f "$disk")")" ] \
+      || { echo "$part is not on $disk"; exit 1; }
+    if lsblk -nro MOUNTPOINTS "$part" | grep -q .; then echo "$part is mounted"; exit 1; fi
+    for md in $(lsblk -nro NAME,TYPE "$part" | awk '$2 == "md" {print $1}' | sort -u); do
+      mdadm --stop "/dev/$md"
+    done
+    fstype=$(blkid -p -o value -s TYPE "$part" || true)
+    case "$fstype" in
+      "" | linux_raid_member) ;;
+      *) echo "$part unexpectedly holds $fstype"; exit 1 ;;
+    esac
+    wipefs -a "$part"
+    mkfs.ext4 -q -m 0 -L "$label" "$part"
+    udevadm settle
+  args:
+    executable: /bin/bash
+  changed_when: true

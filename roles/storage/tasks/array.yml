@@ -1,0 +1,99 @@
+- name: "Look for the filesystem {{ storage_array.label }}"
+  ansible.builtin.command: blkid -L {{ storage_array.label | quote }}
+  register: storage_array_fs
+  changed_when: false
+  failed_when: storage_array_fs.rc not in [0, 2]
+  check_mode: false
+
+- name: "Create {{ storage_array.device }}"
+  when: storage_array_fs.rc == 2
+  block:
+    # Refuses to continue unless the disks are empty or only hold the arrays listed for wiping.
+    - name: "Check that the disks hold nothing of value: {{ storage_array.device }}"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        allowed=" {{ storage_array.wipe_array_uuids | default([]) | join(' ') }} "
+        for disk in {{ storage_array.disks | map('quote') | join(' ') }}; do
+          [ -b "$disk" ] || { echo "$disk does not exist"; exit 1; }
+          if lsblk -nro MOUNTPOINTS "$disk" | grep -q .; then echo "$disk: something is mounted"; exit 1; fi
+          lsblk -nro NAME,TYPE,FSTYPE,UUID "$disk" | while read -r name type fstype uuid; do
+            case "$type" in
+              disk | part) ;;
+              md) continue ;; # an array that is not running
+              *) echo "$disk: $name is in use ($type)"; exit 1 ;;
+            esac
+            [ -n "$fstype" ] || continue
+            case "$fstype:$allowed" in
+              linux_raid_member:*" $uuid "*) ;;
+              *)
+                echo "$disk: $name holds $fstype $uuid, which is not listed in wipe_array_uuids"
+                exit 1
+                ;;
+            esac
+          done
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: "Wipe the disks of {{ storage_array.device }}"
+      ansible.builtin.shell: |
+        set -euo pipefail
+        disks=({{ storage_array.disks | map('quote') | join(' ') }})
+        for disk in "${disks[@]}"; do
+          for md in $(lsblk -nro NAME,TYPE "$disk" | awk '$2 == "md" {print $1}' | sort -u); do
+            mdadm --stop "/dev/$md"
+          done
+        done
+        for disk in "${disks[@]}"; do
+          for part in $(lsblk -nrpo NAME,TYPE "$disk" | awk '$2 == "part" {print $1}'); do
+            wipefs -a "$part"
+          done
+          wipefs -a "$disk"
+          sgdisk --zap-all "$disk"
+          sgdisk -n 1:0:0 -t 1:FD00 -c 1:{{ storage_array.label | quote }} "$disk"
+          partprobe "$disk"
+        done
+        udevadm settle
+        for disk in "${disks[@]}"; do
+          wipefs -a "$disk-part1"
+        done
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: "Create the array {{ storage_array.device }}"
+      ansible.builtin.command: >-
+        mdadm --create {{ storage_array.device | quote }} --run
+        --level={{ storage_array.level }} --raid-devices={{ storage_array.disks | length }}
+        --metadata=1.2 --bitmap=internal
+        --name={{ storage_array.device | basename | regex_replace('^md', '') }}
+        {{ storage_array.disks | map('regex_replace', '$', '-part1') | map('quote') | join(' ') }}
+      changed_when: true
+
+    - name: "Create the filesystem on {{ storage_array.device }}"
+      ansible.builtin.command: mkfs.ext4 -q -m 0 -L {{ storage_array.label | quote }} {{ storage_array.device | quote }}
+      changed_when: true
+
+# From here on the old arrays are gone: forget them, and make the new one keep its name at boot.
+- name: "Remove wiped arrays from mdadm.conf ({{ storage_array.device }})"
+  ansible.builtin.lineinfile:
+    path: /etc/mdadm/mdadm.conf
+    regexp: "UUID={{ item | replace('-', '') | regex_findall('.{8}') | join(':') }}"
+    state: absent
+  loop: "{{ storage_array.wipe_array_uuids | default([]) }}"
+  notify: Update initramfs
+
+- name: "Read the identity of {{ storage_array.device }}"
+  ansible.builtin.command: mdadm --detail --export {{ storage_array.device | quote }}
+  register: storage_array_detail
+  changed_when: false
+
+- name: "Register in mdadm.conf: {{ storage_array.device }}"
+  ansible.builtin.lineinfile:
+    path: /etc/mdadm/mdadm.conf
+    regexp: "^ARRAY {{ storage_array.device | regex_escape }} "
+    line: >-
+      ARRAY {{ storage_array.device }} metadata=1.2
+      UUID={{ storage_array_detail.stdout | regex_search('MD_UUID=(\S+)', '\1') | first }}
+  notify: Update initramfs

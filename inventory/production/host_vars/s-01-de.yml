@@ -1,0 +1,28 @@
+# Data volumes of this server (roles/storage, docs/storage.md). Disks are named by their
+# hardware identifier: sda/sdb and nvme0/nvme1 can swap between boots.
+
+# The two 16 TB hard disks, mirrored.
+storage_arrays:
+  - device: /dev/md3
+    level: 1
+    label: hdd14tb
+    mount: /mnt/14TB
+    disks:
+      - /dev/disk/by-id/wwn-0x5000039b38d12f62
+      - /dev/disk/by-id/wwn-0x5000039b38d15d6f
+    # Arrays of the first installation (md0 to md3 of that time), no longer in use.
+    wipe_array_uuids:
+      - d5f1aa7c-b4a0-6b04-47bc-d55d562ab093
+      - 9c9d2679-228c-d366-eda3-749d384af69b
+      - c7d0b775-1963-bb3d-5668-28769a31d869
+      - dfa4a905-ebc0-dae6-e640-c54baf8eafbf
+
+# The rest of each NVMe drive behind the system mirror, deliberately not mirrored: full speed,
+# no redundancy.
+storage_partitions:
+  - disk: /dev/disk/by-id/nvme-eui.36344830525070220025384500000001 # nvme0n1
+    label: nvme1
+    mount: /mnt/nvme1
+  - disk: /dev/disk/by-id/nvme-eui.36344830525070230025384500000001 # nvme1n1
+    label: nvme2
+    mount: /mnt/nvme2

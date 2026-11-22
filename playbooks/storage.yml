@@ -1,0 +1,7 @@
+# Creates and mounts the data volumes listed per server in inventory/production/host_vars
+# (docs/storage.md). Existing volumes are left alone, so running it again changes nothing.
+- name: Data volumes
+  hosts: k8s_cluster
+  serial: 1
+  roles:
+    - storage

@@ -1,0 +1,25 @@
+- name: "Create the mount point {{ storage_volume.mount }}"
+  ansible.builtin.file:
+    path: "{{ storage_volume.mount }}"
+    state: directory
+    mode: "0755"
+
+# nofail: a broken data disk must never keep the server from booting.
+- name: "Add to fstab: {{ storage_volume.mount }}"
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^\S+\s+{{ storage_volume.mount | regex_escape }}\s'
+    line: "LABEL={{ storage_volume.label }} {{ storage_volume.mount }} ext4 {{ storage_mount_options }} 0 2"
+  notify: Reload systemd
+
+- name: "Check whether it is mounted: {{ storage_volume.mount }}"
+  ansible.builtin.command: findmnt -n {{ storage_volume.mount | quote }}
+  register: storage_mounted
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: "Mount {{ storage_volume.mount }}"
+  ansible.builtin.command: mount {{ storage_volume.mount | quote }} # noqa: command-instead-of-module
+  when: storage_mounted.rc != 0
+  changed_when: true

@@ -1,0 +1,21 @@
+# Data volumes outside the system disk. Set per server in inventory/production/host_vars.
+# See docs/storage.md.
+
+# Software RAID arrays with one filesystem each:
+#   - device: /dev/md3
+#     level: 1
+#     label: hdd14tb            # filesystem label, also used in /etc/fstab
+#     mount: /mnt/14TB
+#     disks: [/dev/disk/by-id/..., ...]   # whole disks, always by-id
+#     # Arrays of an earlier installation that may be destroyed on these disks, as shown by
+#     # `lsblk -o NAME,FSTYPE,UUID`. Anything else found on the disks stops the run.
+#     wipe_array_uuids: []
+storage_arrays: []
+
+# One filesystem in the unpartitioned rest of a disk that is already in use:
+#   - disk: /dev/disk/by-id/...
+#     label: nvme1
+#     mount: /mnt/nvme1
+storage_partitions: []
+
+storage_mount_options: defaults,noatime,nofail
