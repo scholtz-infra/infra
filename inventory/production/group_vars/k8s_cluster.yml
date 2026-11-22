@@ -2,7 +2,8 @@
 # also apply to tasks delegated to localhost, which must not use sudo on the runner.
 #
 # Ansible logs in as the unprivileged user "infra" (key only, created by
-# scripts/bootstrap-server.sh) and becomes root with passwordless sudo. Root cannot log in.
+# scripts/bootstrap-server.sh) and becomes root with passwordless sudo. The deploy key is
+# not authorised for root; root login with the owner's own key stays possible as a last resort.
 ansible_user: infra
 ansible_become: true
 ansible_host: "{{ node_ips[inventory_hostname] | default('missing-in-node-ips-secret.invalid') }}"

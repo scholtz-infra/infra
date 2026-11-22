@@ -5,7 +5,11 @@ workflows can reach it. It takes about 15 minutes per server. Everything after t
 firewall, packages, Kubernetes) is done by the `site` playbook.
 
 The workflows log in as the user **`infra`** with an SSH key and become root with `sudo`. There is
-no password anywhere: `infra` has none, sudo does not ask for one, and root cannot log in over SSH.
+no password anywhere: `infra` has none, sudo does not ask for one, and sshd accepts keys only.
+
+Root login stays possible for **you**, as a last resort, with the key in
+`/root/.ssh/authorized_keys`. Put only your own key there, never the deploy key: the workflows
+and the agent do not log in as root.
 
 You need:
 
@@ -22,7 +26,7 @@ You need:
    - no swap partition,
    - hostname: anything, Ansible sets it to the inventory name.
 3. Reboot into the installed system. It accepts root logins on port 22 with the key you selected
-   in Robot (or the rescue password).
+   in Robot (or the rescue password). Select your own key: it remains root's key afterwards.
 
 Leave the Hetzner Robot firewall for this server switched off, or allow at least the SSH port
 from your address and from GitHub Actions, plus all traffic from the load balancer and the other
@@ -91,8 +95,7 @@ starts the `site` playbook and you approve the run.
 The first `site` run changes these things, so you do not have to:
 
 - hostname and `/etc/hosts` are set from the inventory name,
-- **root login over SSH is switched off** (`PermitRootLogin no`): from then on you log in with
-  `ssh -p <ssh-port> infra@<server-ip>` and use `sudo`,
+- root login is left as it is: `ssh -p <ssh-port> root@<server-ip>` keeps working with your key,
 - the host firewall is installed: from the internet only the SSH port answers,
 - swap is disabled, unattended security updates and SMART monitoring are set up,
 - containerd, HAProxy and Kubernetes are installed and the server joins the cluster.

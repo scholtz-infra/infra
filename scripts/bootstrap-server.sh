@@ -10,8 +10,8 @@
 #   - lets "infra" use sudo without a password
 #   - moves sshd to <ssh-port> and switches password logins off
 #
-# It can be run again, for example to add a key. Root key login stays possible until the first
-# "site" run has logged in as "infra"; that run then switches root login off.
+# It can be run again, for example to add a key. Root login is not touched: root's own
+# authorized_keys keeps working, as the owner's last resort.
 set -euo pipefail
 
 user=infra
@@ -66,7 +66,6 @@ cat > "$config" << EOF
 Port $port
 PasswordAuthentication no
 KbdInteractiveAuthentication no
-PermitRootLogin prohibit-password
 EOF
 mkdir -p /run/sshd
 sshd -t || { rm -f "$config"; die "sshd rejected the configuration, nothing was changed"; }

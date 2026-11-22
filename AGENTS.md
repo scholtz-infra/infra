@@ -52,7 +52,8 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 - **Storage**: `longhorn` (default StorageClass, replicated across nodes once there are several)
   and `local-path` (node-local disk, fastest, pod is pinned to its node).
 - **Server access**: Ansible logs in as the unprivileged user `infra` (key only, no password)
-  and becomes root with passwordless sudo; root login over SSH is switched off. The owner
+  and becomes root with passwordless sudo. Root login over SSH stays possible with the
+  owner's own key, as their last resort: never switch it off, never use it. The owner
   prepares every new server by hand with `scripts/bootstrap-server.sh` (`docs/server-setup.md`).
 - **Server addresses** exist only in the `NODE_IPS` secret (`<inventory name> <IPv4>` per line);
   the inventory holds names and groups only. Like the SSH port, never write a server address
