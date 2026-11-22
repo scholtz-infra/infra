@@ -29,7 +29,7 @@ shift
 [[ "$port" =~ ^[0-9]+$ ]] || die "the SSH port must be a number"
 { [ "$port" -ge 20000 ] && [ "$port" -le 60999 ]; } || die "the SSH port must be between 20000 and 60999"
 case "$port" in
-  53831 | 53443 | 53080 | 7443) die "port $port is used by the cluster" ;;
+  53443 | 53080 | 7443) die "port $port is used by the cluster" ;;
 esac
 for key in "$@"; do
   ssh-keygen -l -f "$key" > /dev/null || die "$key is not a public key file"

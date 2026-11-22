@@ -32,10 +32,11 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 - **Network**: servers only have public IPs. The host firewall (nftables table `inet hostfw`)
   allows everything between cluster nodes; from the internet only the SSH port; the API and
   ingress ports only from the load balancer.
-- **Non-standard ports**: API servers listen on `kube_api_port` (53831, not 6443); the public API
-  address is `https://k8s.biatec.io:53831` through the load balancer. sshd listens
-  on a high port that exists only in the `SSH_PORT` secret: never write that number into the
-  repository, a PR, an issue or a log. The owner sets it when preparing a server.
+- **Non-standard ports, kept secret**: API servers listen on `kube_api_port` (not 6443), which
+  exists only in the `K8S_API_PORT` secret; the public API address is
+  `https://k8s.biatec.io:<K8S_API_PORT>` through the load balancer. sshd listens on a high port
+  that exists only in the `SSH_PORT` secret (the owner sets it when preparing a server). Never
+  write either number into the repository, a PR, an issue or a log.
   Cilium is the CNI, replaces kube-proxy, and encrypts pod traffic between nodes with WireGuard.
 - **Deny-first networking**: every pod only accepts traffic from its own namespace and from the
   nodes; DNS is open. Traffic between namespaces, and from the internet, exists only if it is
@@ -44,8 +45,9 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   not restricted. Tenant namespaces enforce the `baseline` pod security standard.
 - **Web traffic**: a Hetzner Cloud Load Balancer (167.235.110.199 / 2a01:4f8:1c1f:690b::1,
   configured by the owner in the Hetzner console) forwards TCP 443 with PROXY protocol to
-  `ingress_https_port` on every node (and TCP 53831 without PROXY protocol to the API servers), where Cilium's built-in ingress controller (IngressClass
-  `cilium`, classic Ingress API) terminates TLS. Port 80 is not served anywhere. DNS records
+  `ingress_https_port` on every node (and the API port without PROXY protocol to the API
+  servers), where Cilium's built-in ingress controller (IngressClass `cilium`, classic Ingress
+  API) terminates TLS. Port 80 is not served anywhere. DNS records
   point at the load balancer and are managed by the owner in Cloudflare. cert-manager issues Let's Encrypt
   certificates with the Cloudflare DNS-01 challenge (ClusterIssuers `letsencrypt` and
   `letsencrypt-staging`). A namespace only receives web traffic if it is in `network_web`.
@@ -62,7 +64,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   health report) pass through `scripts/redact.py`.
 - **Secrets** are GitHub repository secrets of this repo, by the owner's choice not split per
   environment (`SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `SSH_PORT`, `NODE_IPS`,
-  `CLOUDFLARE_API_TOKEN`; list and formats in `docs/secrets.md`). Never commit a secret, never print one in a workflow log (`no_log: true`
+  `K8S_API_PORT`, `CLOUDFLARE_API_TOKEN`; list and formats in `docs/secrets.md`). Never commit a secret, never print one in a workflow log (`no_log: true`
   in Ansible).
 - **Versions are pinned** in `inventory/production/group_vars/all.yml` and
   `platform/releases.yml`, and move forward only by pull request (Renovate opens them).

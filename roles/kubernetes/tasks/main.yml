@@ -63,3 +63,44 @@
 - name: Record cluster membership
   ansible.builtin.set_fact:
     k8s_joined: "{{ kubernetes_kubelet_conf.stat.exists }}"
+
+# The API port comes from the K8S_API_PORT secret. When it differs from the port a running API
+# server listens on, the static pod manifest is regenerated from the kubeadm configuration and
+# kubelet restarts the API server on the new port (a short API outage; on several control-plane
+# nodes all of them move in the same run). The firewall and HAProxy roles have already switched.
+- name: Move the API server to the configured port
+  when:
+    - k8s_joined
+    - inventory_hostname in groups['control_plane']
+  block:
+    - name: Check the port the API server listens on
+      ansible.builtin.command: >-
+        grep -c -- '--secure-port={{ kube_api_port }}$' /etc/kubernetes/manifests/kube-apiserver.yaml
+      register: kubernetes_port_check
+      changed_when: false
+      failed_when: kubernetes_port_check.rc > 1
+      no_log: true
+
+    - name: Regenerate the API server manifest
+      ansible.builtin.command: >-
+        kubeadm init phase control-plane apiserver --config /etc/kubernetes/kubeadm-config.yaml
+      when: kubernetes_port_check.rc == 1
+      changed_when: true
+
+    - name: Wait for the API server on the configured port
+      ansible.builtin.wait_for:
+        host: "{{ node_ip }}"
+        port: "{{ kube_api_port | int }}"
+        timeout: 300
+      when: kubernetes_port_check.rc == 1
+      no_log: true
+
+    - name: Store the kubeadm configuration in the cluster
+      ansible.builtin.command: >-
+        kubeadm init phase upload-config kubeadm --config /etc/kubernetes/kubeadm-config.yaml
+      when: kubernetes_port_check.rc == 1
+      register: kubernetes_upload_config
+      changed_when: true
+      retries: 30
+      delay: 10
+      until: kubernetes_upload_config.rc == 0

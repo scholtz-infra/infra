@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Removes server addresses and the SSH port from files before they leave the runner.
+"""Removes server addresses and the secret ports (SSH, Kubernetes API) from files before they leave the runner.
 
 GitHub masks secrets in the live log only. Log artifacts, the health report and the alert issue
-are written by us, so they are cleaned here. Reads the NODE_IPS and SSH_PORT environment
-variables (same format as the secrets, see docs/secrets.md).
+are written by us, so they are cleaned here. Reads the NODE_IPS, SSH_PORT and K8S_API_PORT
+environment variables (same format as the secrets, see docs/secrets.md).
 
 Usage: redact.py <file or directory>...
 """
@@ -19,30 +19,31 @@ def parse_node_ips(text):
     return dict(zip(tokens[0::2], tokens[1::2]))
 
 
-def redact(text, node_ips, ssh_port):
+def redact(text, node_ips, ports):
     # longest address first, so that 10.0.0.1 never eats the start of 10.0.0.11
     for name, address in sorted(node_ips.items(), key=lambda item: -len(item[1])):
         text = re.sub(rf"(?<![\d.]){re.escape(address)}(?![\d])", f"[{name}-address]", text)
-    if ssh_port:
-        text = re.sub(rf"(?<!\d){re.escape(ssh_port)}(?!\d)", "***", text)
+    for port in ports:
+        if port:
+            text = re.sub(rf"(?<!\d){re.escape(port)}(?!\d)", "***", text)
     return text
 
 
-def redact_file(path, node_ips, ssh_port):
+def redact_file(path, node_ips, ports):
     original = path.read_text(encoding="utf-8", errors="surrogateescape")
-    cleaned = redact(original, node_ips, ssh_port)
+    cleaned = redact(original, node_ips, ports)
     if cleaned != original:
         path.write_text(cleaned, encoding="utf-8", errors="surrogateescape")
 
 
 def main():
     node_ips = parse_node_ips(os.environ.get("NODE_IPS", ""))
-    ssh_port = os.environ.get("SSH_PORT", "").strip()
+    ports = [os.environ.get(name, "").strip() for name in ("SSH_PORT", "K8S_API_PORT")]
     for argument in sys.argv[1:]:
         root = Path(argument)
         files = [p for p in root.rglob("*") if p.is_file()] if root.is_dir() else [root]
         for path in files:
-            redact_file(path, node_ips, ssh_port)
+            redact_file(path, node_ips, ports)
 
 
 if __name__ == "__main__":

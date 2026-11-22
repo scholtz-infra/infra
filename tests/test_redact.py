@@ -20,15 +20,15 @@ class RedactTest(unittest.TestCase):
         self.assertEqual(redact.parse_node_ips(""), {})
 
     def test_addresses_and_port_are_replaced(self):
-        text = "connect to host 203.0.113.11 port 41922: refused; peer https://203.0.113.1:2380"
+        text = "connect to host 203.0.113.11 port 41922: refused; peer https://203.0.113.1:2380 api :50123"
         self.assertEqual(
-            redact.redact(text, redact.parse_node_ips(NODE_IPS), "41922"),
-            "connect to host [node2-address] port ***: refused; peer https://[node1-address]:2380",
+            redact.redact(text, redact.parse_node_ips(NODE_IPS), ["41922", "50123"]),
+            "connect to host [node2-address] port ***: refused; peer https://[node1-address]:2380 api :***",
         )
 
     def test_other_numbers_are_kept(self):
         text = "size 1419220 at 10.203.0.113.1 and 203.0.113.100"
-        self.assertEqual(redact.redact(text, redact.parse_node_ips(NODE_IPS), "41922"), text)
+        self.assertEqual(redact.redact(text, redact.parse_node_ips(NODE_IPS), ["41922", ""]), text)
 
     def test_directory_is_cleaned_recursively(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -36,6 +36,7 @@ class RedactTest(unittest.TestCase):
             nested.parent.mkdir()
             nested.write_text('{"endpoint": "https://203.0.113.1:2379"}', encoding="utf-8")
             os.environ["NODE_IPS"], os.environ["SSH_PORT"] = NODE_IPS, ""
+            os.environ["K8S_API_PORT"] = ""
             sys.argv = ["redact.py", directory]
             redact.main()
             self.assertEqual(

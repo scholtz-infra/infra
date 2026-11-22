@@ -18,6 +18,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       SSH_PORT: ${{ secrets.SSH_PORT }}
+      K8S_API_PORT: ${{ secrets.K8S_API_PORT }}
       NODE_IPS: ${{ secrets.NODE_IPS }}
     steps:
       - uses: actions/checkout@v7
@@ -37,7 +38,7 @@ jobs:
         run: |
           status=0
           python3 scripts/health_report.py health health/inventory.json > report.md || status=$?
-          # the issue and the artifact are public: keep server addresses and the SSH port out
+          # the issue and the artifact are public: keep server addresses and the secret ports out
           python3 scripts/redact.py report.md health
           cat report.md >> "$GITHUB_STEP_SUMMARY"
           echo "status=$status" >> "$GITHUB_OUTPUT"
