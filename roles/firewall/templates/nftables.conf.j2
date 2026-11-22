@@ -10,6 +10,15 @@ table inet hostfw {
     elements = { {{ groups['k8s_cluster'] | map('extract', hostvars, 'node_ip') | join(', ') }} }
   }
 
+{% if ingress_lb_redirect_ports | default([]) | length > 0 %}
+  # Web traffic the load balancer delivers to another port than the ingress listens on.
+  # After the redirect the input chain below sees it on the ingress port.
+  chain prerouting {
+    type nat hook prerouting priority dstnat; policy accept;
+    ip saddr { {{ firewall_lb_sources | join(', ') }} } tcp dport { {{ ingress_lb_redirect_ports | map('int') | join(', ') }} } redirect to :{{ ingress_https_port | int }}
+  }
+
+{% endif %}
   chain input {
     type filter hook input priority filter; policy drop;
 
