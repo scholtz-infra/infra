@@ -108,7 +108,7 @@
     # Stopped containers of static pods are started again by kubelet with the new kubeconfig.
     - name: Restart kubelet, controller manager and scheduler
       ansible.builtin.shell: |
-        set -e
+        set -eo pipefail
         systemctl restart kubelet
         for name in kube-controller-manager kube-scheduler; do
           crictl ps --name "^${name}$" -q | xargs -r crictl stop
