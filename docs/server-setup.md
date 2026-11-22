@@ -93,7 +93,7 @@ balancer ([setup.md](setup.md) step 5).
 Say which inventory name the server has and whether it is a control-plane node or a worker. The
 agent does not need the address. For the first server (`s-01-de`) the inventory entry already
 exists; for later servers the agent opens a pull request that adds the name. Then the agent
-starts the `site` playbook and you approve the run.
+starts the `site` playbook and supervises the run.
 
 ## What happens to the server afterwards
 

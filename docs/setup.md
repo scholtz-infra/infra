@@ -9,10 +9,10 @@ The complete list of secrets with example values is in [secrets.md](secrets.md).
 1. The repository can stay public: server addresses and the SSH port are only in secrets. The
    load balancer address, the API name and the API port are in the repository.
 2. *Settings > Branches*: protect `main` (require a pull request, require the `lint` check).
-3. *Settings > Environments*: create the environment `production`, add yourself as **required
-   reviewer** and restrict it to the `main` branch (*Deployment branches and tags > Selected
-   branches > main*). It holds no secrets: it is what makes every run that changes servers wait
-   for your approval. Without it those runs start immediately.
+3. Optional, *Settings > Environments > production*: add yourself as **required reviewer** if
+   every run that changes servers should wait for your click. Without a reviewer the agent
+   starts runs itself, based on what you agreed in the conversation, and the scheduled patching
+   and maintenance start on their own.
 4. Optional: install the [Renovate app](https://github.com/apps/renovate) on the repository to get
    version update pull requests.
 
@@ -78,10 +78,26 @@ its address comes from the `NODE_IPS` secret. The API name `k8s.biatec.io` is al
 
 ## 7. Create the cluster
 
-After pull request #1 is merged: *Actions > Run playbook > Run workflow > site*, then approve the
-run. Or ask the agent to do it; it will dispatch the run, wait for your approval and supervise.
+Ask the agent to create the cluster: it dispatches the `site` run and supervises it. Or start it
+yourself: *Actions > Run playbook > Run workflow > site*.
 
 Then run *Health check* once to confirm disks, RAID and cluster are reported healthy.
+
+## For the agent to debug a server
+
+Optional. To let the agent look at a server directly (read-only, see AGENTS.md rule 2), add an
+entry per server to `~/.ssh/config` on the machine the agent runs on. Address and port stay on
+your machine:
+
+```text
+Host s-01-de
+  HostName <server-ip>
+  Port <ssh-port>
+  User infra
+  IdentityFile ~/.ssh/infra
+```
+
+The private key file must be readable by you only: `chmod 600 ~/.ssh/infra`.
 
 ## For the agent to supervise runs
 

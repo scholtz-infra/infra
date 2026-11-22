@@ -6,7 +6,7 @@ Kubernetes on Hetzner dedicated servers, managed by an AI agent and overseen by 
   the same servers, built to grow from one server to a highly available cluster.
 - Cilium networking (WireGuard encrypted), Longhorn and local-path storage.
 - Rolling Ubuntu patching and Kubernetes upgrades, daily SMART/RAID/cluster health check.
-- Everything is changed by pull request and executed by GitHub Actions with an approval step.
+- Everything is changed by pull request and executed by GitHub Actions, with a full log of every run.
 
 | Read | For |
 |---|---|

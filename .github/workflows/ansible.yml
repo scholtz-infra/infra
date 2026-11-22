@@ -1,6 +1,6 @@
-# The only way changes reach the servers. Every run waits for approval on the "production"
-# environment, and keeps its full log as an artifact. The environment exists for the approval
-# only: secrets are repository secrets.
+# The only way changes reach the servers. Every run keeps its full log as an artifact. The
+# "production" environment holds no secrets (they are repository secrets); a required reviewer
+# added to it makes every run wait for approval.
 name: Run playbook
 run-name: >-
   ${{ inputs.playbook || (github.event.schedule == '0 4 1 * *' && 'maintenance' || 'os-patch') }}
@@ -29,7 +29,7 @@ on:
         type: boolean
         default: false
   schedule:
-    # Weekly OS patching, Sunday 03:00 UTC. Waits for approval like every other run.
+    # Weekly OS patching, Sunday 03:00 UTC.
     - cron: "0 3 * * 0"
     # Monthly maintenance (etcd, certificates, housekeeping), 1st of the month 04:00 UTC.
     - cron: "0 4 1 * *"
