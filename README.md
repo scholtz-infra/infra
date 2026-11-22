@@ -11,6 +11,7 @@ Kubernetes on Hetzner dedicated servers, managed by an AI agent and overseen by 
 | Read | For |
 |---|---|
 | [docs/setup.md](docs/setup.md) | First-time setup: what you have to do by hand |
+| [docs/server-setup.md](docs/server-setup.md) | Preparing a new server: user, SSH port, secrets |
 | [docs/secrets.md](docs/secrets.md) | Which GitHub secrets exist and what they look like |
 | [AGENTS.md](AGENTS.md) | How the repo works, rules for the agent, workflows, roadmap |
 | [docs/app-deploy.md](docs/app-deploy.md) | Deploying an application from its own repository |

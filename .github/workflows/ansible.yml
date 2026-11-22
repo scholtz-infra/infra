@@ -49,6 +49,7 @@ jobs:
       PLAYBOOK: ${{ inputs.playbook || (github.event.schedule == '0 4 1 * *' && 'maintenance' || 'os-patch') }}
       LIMIT: ${{ inputs.limit }}
       SSH_PORT: ${{ secrets.SSH_PORT }}
+      NODE_IPS: ${{ secrets.NODE_IPS }}
       CHECK: ${{ inputs.check }}
       ANSIBLE_FORCE_COLOR: "1"
     steps:
@@ -57,6 +58,7 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
           ssh-known-hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+          node-ips: ${{ secrets.NODE_IPS }}
       - name: Run playbooks/${{ env.PLAYBOOK }}.yml
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -69,13 +71,13 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          # the artifact is not masked by GitHub: keep server addresses and the SSH port out of it
+          [ -f ansible.log ] && python3 scripts/redact.py ansible.log
           {
             echo "## ${PLAYBOOK}${LIMIT:+ (limit: $LIMIT)}$([ "$CHECK" = "true" ] && echo ' - dry run')"
             echo "Commit \`${GITHUB_SHA}\`, started by @${GITHUB_ACTOR} (${GITHUB_EVENT_NAME})"
             echo '```'
             if [ -f ansible.log ]; then
-              # the artifact is not masked by GitHub: keep the secret port out of it
-              [ -n "$SSH_PORT" ] && sed -i "s/\b${SSH_PORT}\b/***/g" ansible.log
               sed 's/\x1b\[[0-9;]*m//g' ansible.log | sed -n '/PLAY RECAP/,$p' | head -60
               sed 's/\x1b\[[0-9;]*m//g' ansible.log | grep -E '^(fatal|failed):' | head -40 || true
             else

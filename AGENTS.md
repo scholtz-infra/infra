@@ -35,7 +35,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 - **Non-standard ports**: API servers listen on `kube_api_port` (53831, not 6443); the public API
   address is `https://k8s.biatec.io:53831` through the load balancer. sshd listens
   on a high port that exists only in the `SSH_PORT` secret: never write that number into the
-  repository, a PR, an issue or a log. New servers start on 22 and are moved by `site`.
+  repository, a PR, an issue or a log. The owner sets it when preparing a server.
   Cilium is the CNI, replaces kube-proxy, and encrypts pod traffic between nodes with WireGuard.
 - **Deny-first networking**: every pod only accepts traffic from its own namespace and from the
   nodes; DNS is open. Traffic between namespaces, and from the internet, exists only if it is
@@ -51,9 +51,17 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   `letsencrypt-staging`). A namespace only receives web traffic if it is in `network_web`.
 - **Storage**: `longhorn` (default StorageClass, replicated across nodes once there are several)
   and `local-path` (node-local disk, fastest, pod is pinned to its node).
+- **Server access**: Ansible logs in as the unprivileged user `infra` (key only, no password)
+  and becomes root with passwordless sudo; root login over SSH is switched off. The owner
+  prepares every new server by hand with `scripts/bootstrap-server.sh` (`docs/server-setup.md`).
+- **Server addresses** exist only in the `NODE_IPS` secret (`<inventory name> <IPv4>` per line);
+  the inventory holds names and groups only. Like the SSH port, never write a server address
+  into the repository, a PR, an issue or a log. Files that leave the runner (log artifact,
+  health report) pass through `scripts/redact.py`.
 - **Secrets** live in GitHub Environment secrets of this repo (`SSH_PRIVATE_KEY`,
-  `SSH_KNOWN_HOSTS`, `SSH_PORT`, `CLOUDFLARE_API_TOKEN`; list and formats in `docs/secrets.md`). Never commit a secret, never print
-  one in a workflow log (`no_log: true` in Ansible).
+  `SSH_KNOWN_HOSTS`, `SSH_PORT`, `NODE_IPS`, `CLOUDFLARE_API_TOKEN`; list and formats in
+  `docs/secrets.md`). Never commit a secret, never print one in a workflow log (`no_log: true`
+  in Ansible).
 - **Versions are pinned** in `inventory/production/group_vars/all.yml` and
   `platform/releases.yml`, and move forward only by pull request (Renovate opens them).
 

@@ -6,7 +6,8 @@ The complete list of secrets with example values is in [secrets.md](secrets.md).
 
 ## 1. Repository settings
 
-1. Consider making the repository **private**: the inventory contains the server IP addresses.
+1. The repository can stay public: server addresses and the SSH port are only in secrets. The
+   load balancer address, the API name and the API port are in the repository.
 2. *Settings > Branches*: protect `main` (require a pull request, require the `lint` check).
 3. *Settings > Environments*: create two environments, both restricted to the `main` branch
    (*Deployment branches and tags > Selected branches > main*):
@@ -24,12 +25,12 @@ ssh-keygen -t ed25519 -N "" -C infra-deploy -f ./infra-deploy
 ```
 
 Add the content of `infra-deploy` (private key) as secret `SSH_PRIVATE_KEY` to **both**
-environments, then delete the local file. Keep `infra-deploy.pub` for the server installation.
+environments, then delete the local file. Keep `infra-deploy.pub` for the server preparation.
 
 Choose the SSH port for all servers, a number between 20000 and 60999 that is not 53831, 53443 or
 53080, and add it as secret `SSH_PORT` to **both** environments. It is not stored in the
-repository. Servers are installed with the default port 22; the first `site` run moves sshd to
-this port and closes 22. Afterwards you connect with `ssh -p <port> root@<server-ip>`.
+repository. You set this port on every new server yourself (step 4); afterwards you connect with
+`ssh -p <port> infra@<server-ip>`.
 
 ## 3. Cloudflare API token (certificates)
 
@@ -46,17 +47,9 @@ record such as `*.example.com`) at the load balancer, `A 167.235.110.199` and
 
 ## 4. Server
 
-1. Order the dedicated server in Hetzner Robot.
-2. Install the newest Ubuntu LTS with `installimage` from the rescue system: software RAID 1 over
-   both disks, no swap needed, hostname anything (Ansible sets it). Add your own public key and
-   `infra-deploy.pub` to root's `authorized_keys`.
-3. Collect the host key and store the output as secret `SSH_KNOWN_HOSTS` in **both** environments
-   (one line per server, append when servers are added). The line starts with the inventory name
-   of the server instead of its address, so it stays valid when the SSH port changes:
-
-   ```bash
-   ssh-keyscan -t ed25519 <server-ip> | sed 's/^[^ ]*/node1/'
-   ```
+Install the server, create the `infra` user, set the SSH port and store the server's address and
+host key in the secrets `NODE_IPS` and `SSH_KNOWN_HOSTS`: follow
+[server-setup.md](server-setup.md). The same steps apply to every server added later.
 
 ## 5. Load balancer
 
@@ -81,12 +74,12 @@ checked first.
 
 ## 6. Inventory
 
-Open a pull request that replaces the placeholder address in
-`inventory/production/hosts.yml` with the server IP (or tell the agent the IP). The API name `k8s.biatec.io` is already configured.
+Nothing to do for the first server: `node1` is already in `inventory/production/hosts.yml`, and
+its address comes from the `NODE_IPS` secret. The API name `k8s.biatec.io` is already configured.
 
 ## 7. Create the cluster
 
-After the pull request is merged: *Actions > Run playbook > Run workflow > site*, then approve the
+After pull request #1 is merged: *Actions > Run playbook > Run workflow > site*, then approve the
 run. Or ask the agent to do it; it will dispatch the run, wait for your approval and supervise.
 
 Then run *Health check* once to confirm disks, RAID and cluster are reported healthy.

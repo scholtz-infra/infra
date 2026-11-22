@@ -1,0 +1,11 @@
+# Connection settings of the servers. Kept out of group_vars/all.yml on purpose: variables there
+# also apply to tasks delegated to localhost, which must not use sudo on the runner.
+#
+# Ansible logs in as the unprivileged user "infra" (key only, created by
+# scripts/bootstrap-server.sh) and becomes root with passwordless sudo. Root cannot log in.
+ansible_user: infra
+ansible_become: true
+ansible_host: "{{ node_ips[inventory_hostname] | default('missing-in-node-ips-secret.invalid') }}"
+ansible_port: "{{ ssh_port }}"
+# Host keys are stored under the inventory name, so they do not depend on the port or address.
+ansible_ssh_extra_args: "-o HostKeyAlias={{ inventory_hostname }}"

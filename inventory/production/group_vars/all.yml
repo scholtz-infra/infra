@@ -1,12 +1,13 @@
 # Cluster-wide settings. Versions are pinned here and bumped by PR (Renovate or by hand).
-ansible_user: root
+# How Ansible logs in to the servers (user, sudo, address) is in group_vars/k8s_cluster.yml.
+#
 # The SSH port is not written in this repository: it comes from the SSH_PORT secret of the GitHub
-# environments. A freshly installed server still listens on 22; the site playbook detects that
-# and moves sshd to the secret port (roles/ssh).
+# environments. The owner sets it on a new server with scripts/bootstrap-server.sh; a server that
+# still listens on 22 is detected by the site playbook and moved (roles/ssh).
 ssh_port: "{{ lookup('ansible.builtin.env', 'SSH_PORT') | default('22', true) | int }}"
-ansible_port: "{{ ssh_port }}"
-# Host keys are stored under the inventory name, so they do not depend on the port or address.
-ansible_ssh_extra_args: "-o HostKeyAlias={{ inventory_hostname }}"
+# Server addresses are not written in this repository either: the NODE_IPS secret holds one
+# "<inventory name> <public IPv4>" pair per line.
+node_ips: "{{ dict(lookup('ansible.builtin.env', 'NODE_IPS').split() | batch(2)) }}"
 
 cluster_name: prod
 node_ip: "{{ ansible_host }}"
