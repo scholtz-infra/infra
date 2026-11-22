@@ -82,7 +82,9 @@ def evaluate_smart(data):
 def collect_disks():
     if not shutil.which("smartctl"):
         return [], ["smartctl is not installed (run the site playbook)"]
-    code, out = run(["smartctl", "--scan", "-j"])
+    # --scan-open reports the real type: SATA disks show up as "sat" instead of "scsi", which
+    # would hide their SMART status and attributes.
+    code, out = run(["smartctl", "--scan-open", "-j"])
     try:
         devices = json.loads(out).get("devices", [])
     except ValueError:

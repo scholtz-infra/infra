@@ -16,6 +16,13 @@
     state: present
   when: not kubernetes_kubeadm_bin.stat.exists
 
+# crictl is no longer pulled in by kubeadm. The etcdctl wrapper, the etcd snapshots and the
+# maintenance playbook need it. It is not held: it only moves within the repository's minor.
+- name: Install crictl
+  ansible.builtin.apt:
+    name: cri-tools
+    state: present
+
 - name: Hold Kubernetes packages so OS patching never upgrades them
   ansible.builtin.dpkg_selections:
     name: "{{ item }}"
