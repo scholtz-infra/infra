@@ -57,8 +57,9 @@ account as the dedicated servers, and in an `eu-central` location):
 
 - **Targets**: add each cluster server as *IP* target (its public IPv4). Add new servers here
   when the cluster grows.
-- **Service "web"**: protocol **TCP**, listen port **443**, destination port **53443**,
-  **Proxy protocol: on**, health check TCP on port 53443. No service on port 80.
+- **Service "web"**: protocol **TCP**, listen port **443**, destination port **53443** (443
+  also works: the servers redirect it to 53443 for connections from the load balancer),
+  **Proxy protocol: on**, health check TCP on the destination port. No service on port 80.
 - **Service "kubernetes api"**: protocol **TCP**, listen port and destination port both the
   number in the `K8S_API_PORT` secret, **Proxy protocol: off**, health check TCP on the same
   port. When the cluster has

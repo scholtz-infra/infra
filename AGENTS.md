@@ -45,8 +45,8 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   not restricted. Tenant namespaces enforce the `baseline` pod security standard.
 - **Web traffic**: a Hetzner Cloud Load Balancer (167.235.110.199 / 2a01:4f8:1c1f:690b::1,
   configured by the owner in the Hetzner console) forwards TCP 443 with PROXY protocol to
-  `ingress_https_port` on every node (and the API port without PROXY protocol to the API
-  servers), where Cilium's built-in ingress controller (IngressClass `cilium`, classic Ingress
+  `ingress_https_port` on every node, or to 443, which the host firewall redirects there for
+  the load balancer only (and the API port without PROXY protocol to the API servers), where Cilium's built-in ingress controller (IngressClass `cilium`, classic Ingress
   API) terminates TLS. Port 80 is not served anywhere. DNS records
   point at the load balancer and are managed by the owner in Cloudflare. cert-manager issues Let's Encrypt
   certificates with the Cloudflare DNS-01 challenge (ClusterIssuers `letsencrypt` and

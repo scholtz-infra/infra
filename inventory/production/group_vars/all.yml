@@ -49,6 +49,11 @@ ingress_https_port: 53443
 # Cilium always opens a plain HTTP listener as well; it is never reachable from outside the nodes.
 ingress_http_port: 53080
 ingress_proxy_protocol: true
+# The load balancer's web service may also deliver to these ports on the nodes (its destination
+# port is 443 at the moment): connections from the load balancer to them are redirected to
+# ingress_https_port by the host firewall. Nothing listens on them and nobody else reaches them.
+ingress_lb_redirect_ports:
+  - 443
 
 # Host firewall. From the internet only the SSH port is reachable; the API and ingress ports only
 # from the load balancer. Everything else is only open between cluster nodes.
