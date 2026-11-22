@@ -41,14 +41,14 @@ One line per server: the **inventory name** of the server (as in
 `inventory/production/hosts.yml`), then its ed25519 host key. Not the IP address and no port.
 
 ```text
-node1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleHostKeyOfNode1xxxxxxxxxxxxxxxxxxxxxxxx
-node2 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleHostKeyOfNode2xxxxxxxxxxxxxxxxxxxxxxxx
+s-01-de ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleHostKeyOfNode1xxxxxxxxxxxxxxxxxxxxxxxx
+s-02-de ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleHostKeyOfNode2xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 `scripts/bootstrap-server.sh` prints the line for a new server. To get it again later:
 
 ```bash
-ssh-keyscan -p <ssh-port> -t ed25519 <server-ip> | sed 's/^[^ ]*/node1/'
+ssh-keyscan -p <ssh-port> -t ed25519 <server-ip> | sed 's/^[^ ]*/s-01-de/'
 ```
 
 Update this secret every time a server is added or reinstalled (a reinstall creates a new host
@@ -60,8 +60,8 @@ One line per server: the **inventory name** of the server, a space, its public I
 Every host in `inventory/production/hosts.yml` needs a line.
 
 ```text
-node1 203.0.113.10
-node2 203.0.113.11
+s-01-de 203.0.113.10
+s-02-de 203.0.113.11
 ```
 
 Update this secret every time a server is added or gets a new address. The workflows hide these

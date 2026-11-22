@@ -93,7 +93,7 @@ Keep this session open and test from your machine in a second terminal:
 
   ssh -p $port $user@<server-ip> sudo -n true && echo OK
 
-Host key line for the SSH_KNOWN_HOSTS secret (replace NAME with the inventory name, e.g. node1):
+Host key line for the SSH_KNOWN_HOSTS secret (replace NAME with the inventory name, e.g. s-01-de):
 
   NAME $(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)
 EOF

@@ -21,7 +21,7 @@ You need:
 - the deploy key pair and the SSH port from [setup.md](setup.md) step 2 (`infra-deploy.pub` and
   the number you stored in the `SSH_PORT` secret),
 - your own public SSH key, so that you can log in yourself,
-- the inventory name of the server (`node1`, `node2`, ...).
+- the inventory name of the server (`s-01-de`, `s-02-de`, ...).
 
 ## 1. Install Ubuntu
 
@@ -80,8 +80,8 @@ and set the whole value again when a server is added. Formats and examples are i
 
 | Secret | Line to add | Where it comes from |
 |---|---|---|
-| `NODE_IPS` | `node1 <server-ip>` | Public IPv4 of the server, from Robot |
-| `SSH_KNOWN_HOSTS` | `node1 ssh-ed25519 AAAA...` | Printed by the script at the end; replace `NAME` with the inventory name |
+| `NODE_IPS` | `s-01-de <server-ip>` | Public IPv4 of the server, from Robot |
+| `SSH_KNOWN_HOSTS` | `s-01-de ssh-ed25519 AAAA...` | Printed by the script at the end; replace `NAME` with the inventory name |
 
 ## 5. Add the server to the load balancer
 
@@ -91,7 +91,7 @@ balancer ([setup.md](setup.md) step 5).
 ## 6. Tell the agent
 
 Say which inventory name the server has and whether it is a control-plane node or a worker. The
-agent does not need the address. For the first server (`node1`) the inventory entry already
+agent does not need the address. For the first server (`s-01-de`) the inventory entry already
 exists; for later servers the agent opens a pull request that adds the name. Then the agent
 starts the `site` playbook and you approve the run.
 
