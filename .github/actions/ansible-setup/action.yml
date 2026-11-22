@@ -31,10 +31,27 @@ runs:
           echo "::error::Secrets SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS and NODE_IPS must be set as repository secrets (see docs/secrets.md)"
           exit 1
         fi
-        # GitHub only hides the secret as a whole: hide every single address in the log as well.
-        while read -r _ address; do
-          [ -n "$address" ] && echo "::add-mask::$address"
+        NODE_IPS=${NODE_IPS//$'\r'/}
+        # GitHub only hides the secret as a whole: hide every single address in the log as well,
+        # before anything about the secret is printed.
+        for token in $NODE_IPS; do
+          [[ "$token" == *[.:]* ]] && echo "::add-mask::$token"
+        done
+        names=()
+        bad=0
+        while read -r name address rest; do
+          [ -z "$name" ] && continue
+          if [[ -z "$rest" && "$name" =~ ^[a-z][a-z0-9-]*$ && "$address" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+            names+=("$name")
+          else
+            bad=$((bad + 1))
+          fi
         done <<< "$NODE_IPS"
+        if [ "$bad" -gt 0 ]; then
+          echo "::error::NODE_IPS has $bad line(s) in the wrong format. Every line must be '<inventory name> <IPv4>' (see docs/secrets.md)"
+          exit 1
+        fi
+        echo "NODE_IPS holds an address for: ${names[*]}"
         install -d -m 700 ~/.ssh
         printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
