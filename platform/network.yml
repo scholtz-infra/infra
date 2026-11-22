@@ -18,5 +18,6 @@ network_allow: []
 
 # Namespaces whose pods may receive web traffic from the internet through the ingress
 # (port 443 of the load balancer). An Ingress in a namespace that is not listed here answers 403.
-network_web: []
+network_web:
+  - headlamp # dashboard, docs/dashboard.md
 # - my-app
