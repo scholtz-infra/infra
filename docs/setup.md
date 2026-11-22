@@ -73,7 +73,7 @@ checked first.
 
 ## 6. Inventory
 
-Nothing to do for the first server: `node1` is already in `inventory/production/hosts.yml`, and
+Nothing to do for the first server: `s-01-de` is already in `inventory/production/hosts.yml`, and
 its address comes from the `NODE_IPS` secret. The API name `k8s.biatec.io` is already configured.
 
 ## 7. Create the cluster
