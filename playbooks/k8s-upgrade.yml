@@ -15,3 +15,11 @@
   tasks:
     - name: Upgrade
       ansible.builtin.include_tasks: tasks/k8s-upgrade-node.yml
+
+# Restarted or moved Vault pods come back sealed (docs/vault.md).
+- name: Vault
+  hosts: "{{ kubectl_host | default('control_plane[0]') }}"
+  gather_facts: false
+  tasks:
+    - name: Unseal Vault
+      ansible.builtin.include_tasks: tasks/vault-unseal.yml

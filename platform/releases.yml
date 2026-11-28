@@ -39,6 +39,23 @@ platform_releases:
     # renovate: datasource=helm registryUrl=https://prometheus-community.github.io/helm-charts depName=kube-prometheus-stack
     version: "93.7.0"
 
+  # Secret store (docs/vault.md). Initialised, unsealed and configured by
+  # playbooks/tasks/vault-configure.yml.
+  - name: vault
+    namespace: vault
+    repo: https://helm.releases.hashicorp.com
+    chart: vault
+    # renovate: datasource=helm registryUrl=https://helm.releases.hashicorp.com depName=vault
+    version: "0.34.1"
+
+  # Copies secrets from Vault into Kubernetes Secrets and keeps them up to date (docs/vault.md).
+  - name: vault-secrets-operator
+    namespace: vault-secrets-operator
+    repo: https://helm.releases.hashicorp.com
+    chart: vault-secrets-operator
+    # renovate: datasource=helm registryUrl=https://helm.releases.hashicorp.com depName=vault-secrets-operator
+    version: "2.0.0"
+
 # renovate: datasource=github-releases depName=helm/helm extractVersion=^v(?<version>.+)$
 helm_version: "4.3.2"
 

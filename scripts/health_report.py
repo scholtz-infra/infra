@@ -39,6 +39,21 @@ def cluster_problems(nodes, pods_text):
     return problems
 
 
+def vault_problems(status, pods_text):
+    """status: parsed `vault status -format=json`, or None when it could not be read."""
+    installed = any(line.split()[:2] == ["vault", "vault-0"] for line in pods_text.splitlines())
+    if status is None:
+        return ["Vault does not answer (pod vault/vault-0)"] if installed else []
+    if not status.get("initialized"):
+        return ["Vault is not initialised: run `platform` (docs/vault.md)"]
+    if status.get("sealed"):
+        return [
+            "Vault is sealed: secret changes do not reach the applications. "
+            "Run `maintenance` or `platform` to unseal it (docs/vault.md)"
+        ]
+    return []
+
+
 def main():
     health_dir, inventory_path = sys.argv[1], sys.argv[2]
     inventory = load_json(inventory_path) or {}
@@ -79,6 +94,8 @@ def main():
     except OSError:
         pods_text = ""
     problems += cluster_problems(nodes, pods_text)
+    vault = load_json(os.path.join(health_dir, "vault.json"))
+    problems += vault_problems(vault, pods_text)
 
     print("## Infrastructure health\n")
     print(f"**{'PROBLEMS FOUND' if problems else 'All healthy'}**\n")
@@ -93,6 +110,9 @@ def main():
         for node in nodes.get("items", []):
             ready = next((c["status"] for c in node["status"]["conditions"] if c["type"] == "Ready"), "Unknown")
             print(f"| {node['metadata']['name']} | {node['status']['nodeInfo']['kubeletVersion']} | {ready} |")
+        if vault:
+            state = "sealed" if vault.get("sealed") else "unsealed"
+            print(f"\nVault {vault.get('version', '?')}: {state}")
     else:
         print("\nNo Kubernetes cluster data (cluster not created yet, or the API is unreachable).")
     return 1 if problems else 0

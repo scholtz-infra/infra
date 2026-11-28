@@ -11,12 +11,13 @@ infrastructure; the owner oversees it through pull requests, workflow approvals 
 | Servers (Ubuntu, Hetzner dedicated) | Ansible roles | `roles/base`, `roles/firewall`, `roles/diskhealth` |
 | Data volumes on the servers (`/mnt/...`) | Ansible | `roles/storage`, `inventory/production/host_vars/`, `playbooks/storage.yml`, `docs/storage.md` |
 | Kubernetes (vanilla, kubeadm, stacked etcd) | Ansible | `roles/containerd`, `roles/apilb`, `roles/kubernetes`, `playbooks/site.yml` |
-| In-cluster platform (Cilium incl. ingress, cert-manager, Longhorn, local-path, Headlamp dashboard, monitoring with Prometheus, Alertmanager and Grafana, later Redis etc.) | Helm, driven by Ansible | `platform/releases.yml`, `platform/values/`, `playbooks/platform.yml` |
+| In-cluster platform (Cilium incl. ingress, cert-manager, Longhorn, local-path, Headlamp dashboard, monitoring with Prometheus, Alertmanager and Grafana, Vault, later Redis etc.) | Helm, driven by Ansible | `platform/releases.yml`, `platform/values/`, `playbooks/platform.yml` |
+| Application secrets (HashiCorp Vault, synced into Kubernetes Secrets) | Helm; initialised, unsealed and configured by Ansible | `playbooks/tasks/vault-*.yml`, `playbooks/vault-import.yml`, `docs/vault.md` |
 | Access for application repositories | GitHub OIDC + RBAC | `platform/tenants.yml`, `docs/app-deploy.md` |
 | Network access between namespaces | Cilium / Kubernetes network policies, deny-first | `platform/network.yml` |
 | OS patching, Kubernetes upgrades | Ansible, rolling, one node at a time | `playbooks/os-patch.yml`, `playbooks/k8s-upgrade.yml` |
 | etcd snapshots and defragmentation, certificate renewal, housekeeping | systemd timer on the nodes, monthly playbook | `roles/etcd`, `playbooks/maintenance.yml` |
-| Health (SMART, RAID, updates, certificates, etcd, nodes, pods) | Daily workflow, opens an issue | `playbooks/health.yml`, `scripts/` |
+| Health (SMART, RAID, updates, certificates, etcd, nodes, pods, Vault seal state) | Daily workflow, opens an issue | `playbooks/health.yml`, `scripts/` |
 
 Applications themselves are **not** deployed from here. They are deployed by GitHub Actions in
 their own repositories into the namespace granted in `platform/tenants.yml`.
@@ -63,10 +64,17 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
   the inventory holds names and groups only. Like the SSH port, never write a server address
   into the repository, a PR, an issue or a log. Files that leave the runner (log artifact,
   health report) pass through `scripts/redact.py`.
-- **Secrets** are GitHub repository secrets of this repo, by the owner's choice not split per
+- **Infrastructure secrets** are GitHub repository secrets of this repo, by the owner's choice not split per
   environment (`SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `SSH_PORT`, `NODE_IPS`,
-  `K8S_API_PORT`, `CLOUDFLARE_API_TOKEN`; list and formats in `docs/secrets.md`). Never commit a secret, never print one in a workflow log (`no_log: true`
+  `K8S_API_PORT`, `CLOUDFLARE_API_TOKEN`, `VAULT_UNSEAL_KEY`, `VAULT_ROOT_TOKEN`,
+  `VAULT_ADMIN_PASSWORD`; list and formats in `docs/secrets.md`). Never commit a secret, never print one in a workflow log (`no_log: true`
   in Ansible).
+- **Application secrets** live in HashiCorp Vault (`docs/vault.md`), in `kv/<namespace>/<name>`,
+  and nowhere else: not in a repository (this one is public), not in a ConfigMap, not in a
+  workflow log. The Vault Secrets Operator copies them into Kubernetes Secrets and keeps them
+  current; a namespace can only read its own path. Vault is unsealed by the playbooks with the
+  `VAULT_UNSEAL_KEY` repository secret; the key is not stored in the cluster. The Vault login
+  page is public at `vault_fqdn`.
 - **Versions are pinned** in `inventory/production/group_vars/all.yml` and
   `platform/releases.yml`, and move forward only by pull request (Renovate opens them).
 
@@ -110,7 +118,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 | Workflow | Trigger | Environment | Purpose |
 |---|---|---|---|
 | `Lint` (`lint.yml`) | PR, push to main | none | yamllint, ansible-lint, syntax check, unit tests |
-| `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch`, monthly `maintenance` | `production` | `site`, `platform`, `os-patch`, `k8s-upgrade`, `maintenance`, `storage` |
+| `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch`, monthly `maintenance` | `production` | `site`, `platform`, `os-patch`, `k8s-upgrade`, `maintenance`, `storage`, `vault-import` |
 | `Health check` (`health.yml`) | daily 05:17 UTC, manual | none (no approval) | read-only report; opens/updates the `health-alert` issue |
 
 Playbooks:
@@ -123,8 +131,10 @@ Playbooks:
 - `k8s-upgrade` - rolling kubeadm upgrade to `kubernetes_version`.
 - `storage` - creates and mounts the data volumes listed per server in `host_vars`
   (`docs/storage.md`); never touches a volume that already exists.
-- `maintenance` - etcd snapshot and defragmentation, kubeadm certificate renewal, housekeeping;
-  every step only acts when needed.
+- `maintenance` - etcd snapshot and defragmentation, kubeadm certificate renewal, Vault unseal,
+  housekeeping; every step only acts when needed.
+- `vault-import` - writes the content of the temporary `VAULT_IMPORT` repository secret into
+  Vault (`docs/vault.md`); delete that secret after the run.
 
 ## How oversight works
 
@@ -155,12 +165,12 @@ Playbooks:
 
 Not built yet, in rough priority order. Tell the owner when one of them becomes relevant.
 
-1. **etcd and volume backups off the server** (Hetzner Storage Box or S3). etcd snapshots exist
+1. **etcd, Vault and volume backups off the server** (Hetzner Storage Box or S3). etcd snapshots exist
    only on the control-plane nodes themselves (`/var/backups/etcd`); losing the only server
-   loses the cluster state.
+   loses the cluster state and every secret stored in Vault.
 2. Alert delivery: Prometheus, Alertmanager and Grafana run (`docs/monitoring.md`), but
    Alertmanager sends notifications nowhere until the owner names a destination. etcd,
    scheduler and controller manager are not scraped.
 3. Redis and other infrastructure applications, on request.
 4. Node removal playbook; Ubuntu release upgrades (e.g. 24.04 to 26.04) are manual so far.
-5. Optional: move secrets to Azure Key Vault with External Secrets Operator.
+5. Vault with three replicas once the cluster has three servers (`docs/vault.md`).

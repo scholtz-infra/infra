@@ -1,0 +1,101 @@
+# Unseals every Vault pod that is sealed (docs/vault.md). Does nothing when Vault is not
+# installed, not initialised yet, or already unsealed. Safe to include from any play: every task
+# runs on the kubectl host.
+#
+# The unseal key comes from the VAULT_UNSEAL_KEY repository secret. Right after the very first
+# install it is still in /root/vault-init.json on the kubectl host and is taken from there.
+- name: Unseal Vault
+  delegate_to: "{{ kubectl_host }}"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  block:
+    - name: Check whether Vault is installed
+      ansible.builtin.command: kubectl -n vault get statefulset vault -o jsonpath={.spec.replicas}
+      register: vault_statefulset
+      changed_when: false
+      failed_when: false
+
+    - name: Unseal the Vault pods
+      when: vault_statefulset.rc == 0
+      block:
+        - name: Wait for the Vault pods to run
+          ansible.builtin.command: >-
+            kubectl -n vault wait pod -l app.kubernetes.io/name=vault,component=server
+            --for=jsonpath={.status.phase}=Running --timeout=600s
+          changed_when: false
+
+        # Exit code 0 = unsealed, 2 = sealed, anything else = not answering yet.
+        - name: Read the seal status
+          ansible.builtin.command: kubectl -n vault exec vault-{{ item }} -- vault status -format=json
+          loop: "{{ range(vault_statefulset.stdout | int) | list }}"
+          register: vault_seal_status
+          changed_when: false
+          failed_when: vault_seal_status.rc not in [0, 2]
+          retries: 30
+          delay: 5
+          until: vault_seal_status.rc in [0, 2]
+
+        - name: List the sealed pods
+          ansible.builtin.set_fact:
+            vault_sealed_pods: >-
+              {{ vault_seal_status.results | selectattr('rc', 'equalto', 2)
+                 | selectattr('stdout', 'search', '"initialized": *true') | map(attribute='item') | list }}
+
+        - name: Unseal
+          when: vault_sealed_pods | length > 0
+          block:
+            - name: Look for the init file of a fresh install
+              ansible.builtin.stat:
+                path: /root/vault-init.json
+              register: vault_unseal_init_file
+
+            - name: Read the init file
+              ansible.builtin.slurp:
+                src: /root/vault-init.json
+              register: vault_unseal_init_content
+              when: vault_unseal_init_file.stat.exists
+              no_log: true
+
+            - name: Pick the unseal key
+              ansible.builtin.set_fact:
+                vault_unseal_key_value: >-
+                  {{ lookup('ansible.builtin.env', 'VAULT_UNSEAL_KEY') | trim
+                     or ((vault_unseal_init_content.content | b64decode | from_json).unseal_keys_b64[0]
+                         if vault_unseal_init_file.stat.exists else '') }}
+              no_log: true
+
+            - name: Stop when there is no unseal key
+              ansible.builtin.assert:
+                that: vault_unseal_key_value | length > 0
+                fail_msg: >-
+                  Vault is sealed and the VAULT_UNSEAL_KEY repository secret is not set
+                  (docs/vault.md). Applications keep running with the secrets they already have,
+                  but changes made in Vault do not reach them.
+                quiet: true
+
+            - name: Unseal the pod
+              ansible.builtin.command:
+                argv:
+                  - kubectl
+                  - -n
+                  - vault
+                  - exec
+                  - -i
+                  - "vault-{{ item }}"
+                  - --
+                  - sh
+                  - -c
+                  - read -r key && vault operator unseal "$key" > /dev/null
+                stdin: "{{ vault_unseal_key_value }}"
+              loop: "{{ vault_sealed_pods }}"
+              changed_when: true
+              no_log: true
+
+            - name: Wait until Vault answers unsealed
+              ansible.builtin.command: kubectl -n vault exec vault-{{ item }} -- vault status -format=json
+              loop: "{{ vault_sealed_pods }}"
+              register: vault_unsealed
+              changed_when: false
+              retries: 30
+              delay: 5
+              until: vault_unsealed.rc == 0

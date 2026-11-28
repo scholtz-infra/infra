@@ -1,0 +1,12 @@
+# Managed by playbooks/tasks/vault-configure.yml.
+# A service account that logged in through Kubernetes may read the secrets below
+# kv/<the namespace of that service account>/ and nothing else. Vault fills in the namespace
+# from the login itself, so one policy serves every namespace.
+{% set namespace = '{{identity.entity.aliases.' ~ vault_kubernetes_accessor ~ '.metadata.service_account_namespace}}' %}
+path "kv/data/{{ namespace }}/*" {
+  capabilities = ["read"]
+}
+
+path "kv/metadata/{{ namespace }}/*" {
+  capabilities = ["read", "list"]
+}

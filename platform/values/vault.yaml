@@ -1,0 +1,56 @@
+# HashiCorp Vault, the secret store of the cluster (docs/vault.md). Web UI and API at
+# https://{{ vault_fqdn }}.
+#
+# The chart only starts Vault. Initialising, unsealing and configuring it (secret engine,
+# Kubernetes login, policies) is done by playbooks/tasks/vault-configure.yml.
+
+# No sidecar injection: secrets reach applications as Kubernetes Secrets through the
+# vault-secrets-operator release.
+injector:
+  enabled: false
+
+server:
+  # Integrated (Raft) storage, so that Vault can grow to three replicas with the cluster without
+  # moving its data. One replica for now: adding replicas also needs retry_join in the Raft
+  # configuration (docs/vault.md).
+  ha:
+    enabled: true
+    replicas: 1
+    raft:
+      enabled: true
+      setNodeId: true
+    # With one replica the chart's budget allows no disruption at all, which would block every
+    # node drain (os-patch, k8s-upgrade).
+    disruptionBudget:
+      enabled: false
+
+  # A sealed or not yet initialised Vault must still count as "ready": otherwise the first
+  # install never finishes (helm --wait) and a sealed pod cannot be reached to unseal it.
+  # Whether Vault is sealed is reported by the health check instead.
+  readinessProbe:
+    path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: longhorn
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+  ingress:
+    enabled: true
+    ingressClassName: cilium
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt
+    hosts:
+      - host: {{ vault_fqdn }}
+        paths: []
+    tls:
+      - secretName: vault-tls
+        hosts:
+          - {{ vault_fqdn }}

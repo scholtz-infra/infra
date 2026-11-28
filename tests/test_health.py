@@ -117,5 +117,27 @@ class ClusterTest(unittest.TestCase):
         self.assertEqual(len(problems), 2)
 
 
+class VaultTest(unittest.TestCase):
+    PODS = "vault vault-0 Running true\nkube-system coredns-1 Running true\n"
+
+    def test_not_installed(self):
+        self.assertEqual(health_report.vault_problems(None, "kube-system coredns-1 Running true\n"), [])
+
+    def test_unsealed(self):
+        self.assertEqual(health_report.vault_problems({"initialized": True, "sealed": False}, self.PODS), [])
+
+    def test_sealed(self):
+        problems = health_report.vault_problems({"initialized": True, "sealed": True}, self.PODS)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("sealed", problems[0])
+
+    def test_not_initialised(self):
+        problems = health_report.vault_problems({"initialized": False, "sealed": True}, self.PODS)
+        self.assertIn("not initialised", problems[0])
+
+    def test_no_answer(self):
+        self.assertEqual(len(health_report.vault_problems(None, self.PODS)), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

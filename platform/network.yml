@@ -16,6 +16,10 @@ network_allow:
   - to: kube-system
     from: monitoring
     ports: [9153]
+  # The secrets operator reads from Vault (docs/vault.md).
+  - to: vault
+    from: vault-secrets-operator
+    ports: [8200]
 # - to: redis
 #   from: my-app
 #   ports: [6379]
@@ -25,4 +29,5 @@ network_allow:
 network_web:
   - headlamp # dashboard, docs/dashboard.md
   - monitoring # Grafana, docs/monitoring.md
+  - vault # Vault web UI and API, docs/vault.md
 # - my-app
