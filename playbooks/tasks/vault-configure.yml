@@ -5,7 +5,8 @@
 #      /root/vault-init.json until they are stored as repository secrets
 #   2. unseal
 #   3. configure: secret engine kv, login for service accounts, policies, the owner's login
-#   4. remove /root/vault-init.json once the repository secrets hold the same values
+#   4. tell the Vault Secrets Operator where Vault is
+#   5. remove /root/vault-init.json once the repository secrets hold the same values
 #
 # Nothing here may print a key, token or password: every task that handles one has no_log.
 - name: Read the Vault status
@@ -147,6 +148,22 @@
       VAULT_ADMIN_PASSWORD is not set: nobody can log in to https://{{ vault_fqdn }} until the
       owner sets that repository secret and `platform` runs again (docs/vault.md).
   when: vault_admin_password | length == 0
+
+# The Vault every namespace talks to. Plain HTTP inside the cluster: pod traffic between nodes is
+# encrypted by Cilium (WireGuard). Not part of the operator's Helm release, see its values file.
+- name: Point the Vault Secrets Operator at Vault
+  ansible.builtin.command: kubectl apply -f -
+  args:
+    stdin: |
+      apiVersion: secrets.hashicorp.com/v1beta1
+      kind: VaultConnection
+      metadata:
+        name: default
+        namespace: vault-secrets-operator
+      spec:
+        address: http://vault.vault.svc.cluster.local:8200
+  register: vault_connection
+  changed_when: "'created' in vault_connection.stdout or 'configured' in vault_connection.stdout"
 
 # The file has done its job as soon as the repository secrets hold what is in it.
 - name: Remove the init file once the repository secrets hold its content
