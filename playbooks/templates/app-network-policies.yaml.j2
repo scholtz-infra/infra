@@ -1,0 +1,62 @@
+{# Network policies of the application namespaces. Same rules as platform/network.yml: a
+   namespace accepts traffic from itself and from the nodes, and anything else must be listed. #}
+{% set managed = 'infra/managed-by: app-network-policies' %}
+{% for app in apps_namespaces %}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: {{ app.name }}
+  labels:
+    {{ managed }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+{% if app.web | default(false) %}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-from-ingress
+  namespace: {{ app.name }}
+  labels:
+    {{ managed }}
+spec:
+  description: Pods in this namespace may receive web traffic through the ingress proxy
+  endpointSelector: {}
+  ingress:
+    - fromEntities:
+        - ingress
+{% endif %}
+{% for rule in app.allow_from | default([]) %}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-{{ rule.namespace }}
+  namespace: {{ app.name }}
+  labels:
+    {{ managed }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ rule.namespace }}
+{% if rule.ports | default([]) %}
+      ports:
+{% for port in rule.ports %}
+        - port: {{ port }}
+          protocol: TCP
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endfor %}
