@@ -22,6 +22,7 @@ on:
           - maintenance
           - storage
           - vault-import
+          - apps
       limit:
         description: Only these hosts (Ansible --limit, empty = all). Not allowed for "site".
         type: string
@@ -63,8 +64,19 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
           ssh-known-hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
           node-ips: ${{ secrets.NODE_IPS }}
+      # The applications are described in a private repository that has no workflows of its own
+      # (docs/apps.md). CONFIG_REPO_DEPLOY_KEY is a read-only deploy key of that repository.
+      - name: Check out the application configuration
+        if: env.PLAYBOOK == 'apps'
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.CONFIG_REPOSITORY || format('{0}/config', github.repository_owner) }}
+          ssh-key: ${{ secrets.CONFIG_REPO_DEPLOY_KEY }}
+          path: config
+          persist-credentials: false
       - name: Run playbooks/${{ env.PLAYBOOK }}.yml
         env:
+          CONFIG_DIR: ${{ github.workspace }}/config
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           VAULT_UNSEAL_KEY: ${{ secrets.VAULT_UNSEAL_KEY }}
           VAULT_ROOT_TOKEN: ${{ secrets.VAULT_ROOT_TOKEN }}

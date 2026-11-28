@@ -1,0 +1,155 @@
+# Deploys the applications described in the private configuration repository (docs/apps.md).
+# The `Run playbook` workflow checks that repository out next to this one and passes its path in
+# CONFIG_DIR. Layout of the configuration repository:
+#
+#   namespaces.yml          which namespaces exist, which receive web traffic, who may connect
+#   apps/<namespace>/       Kubernetes manifests of that namespace (*.yaml, *.yml, *.json)
+#
+# Per namespace this playbook creates the namespace itself, the login the Vault Secrets Operator
+# uses for it (docs/vault.md) and its network policies, then applies the manifests. Nothing is
+# ever deleted except network policies that are no longer listed.
+#
+# The workflow log of this repository is public: manifest contents never appear in it, only
+# namespace names and the names of changed objects.
+- name: Deploy applications
+  hosts: "{{ kubectl_host | default('control_plane[0]') }}"
+  gather_facts: false
+  vars_files:
+    - ../platform/releases.yml
+    - ../platform/tenants.yml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  vars:
+    apps_config_dir: "{{ lookup('ansible.builtin.env', 'CONFIG_DIR') | default(playbook_dir ~ '/../config', true) }}"
+    # Namespaces owned by the platform or by a tenant repository: never managed from here.
+    apps_reserved_namespaces: >-
+      {{ (['default', 'kube-system', 'kube-public', 'kube-node-lease', 'local-path-storage']
+          + (platform_releases | map(attribute='namespace') | list)
+          + (tenants | map(attribute='namespace') | list)) | unique }}
+  tasks:
+    - name: Read namespaces.yml of the configuration repository
+      ansible.builtin.include_vars:
+        file: "{{ apps_config_dir }}/namespaces.yml"
+        name: apps_config
+
+    - name: Remember the namespaces
+      ansible.builtin.set_fact:
+        apps_namespaces: "{{ apps_config.namespaces | default([]) }}"
+
+    - name: Validate namespaces.yml
+      ansible.builtin.assert:
+        that:
+          - item.name is string
+          - item.name is match('^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$')
+          - item.name not in apps_reserved_namespaces
+          - not item.name.startswith('kube-')
+          - item.web | default(false) is boolean
+          - item.allow_from | default([]) | rejectattr('namespace', 'string') | list | length == 0
+        fail_msg: >-
+          namespaces.yml: every entry needs a valid `name` that is not a platform or tenant
+          namespace; `web` is true or false; every `allow_from` entry needs a `namespace`.
+        quiet: true
+      loop: "{{ apps_namespaces }}"
+      loop_control:
+        label: "{{ item.name | default('?') }}"
+
+    - name: Check that namespace names are unique
+      ansible.builtin.assert:
+        that: apps_namespaces | map(attribute='name') | unique | length == apps_namespaces | length
+        fail_msg: "namespaces.yml lists a namespace twice"
+        quiet: true
+
+    - name: Look for the manifests of each namespace
+      ansible.builtin.stat:
+        path: "{{ apps_config_dir }}/apps/{{ item.name }}"
+      loop: "{{ apps_namespaces }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: apps_manifest_dirs
+      delegate_to: localhost
+      become: false
+
+    # Start from an empty directory so that a manifest removed from the repository is not
+    # applied again from an old copy.
+    - name: Remove the manifests of the previous run
+      ansible.builtin.file:
+        path: /etc/kubernetes/apps
+        state: absent
+      changed_when: false
+
+    - name: Create the manifest directories
+      ansible.builtin.file:
+        path: "/etc/kubernetes/apps/{{ item.name }}"
+        state: directory
+        mode: "0700"
+      loop: "{{ apps_namespaces }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+
+    # diff is off on purpose: a dry run with --diff would print the manifests into the public log.
+    - name: Upload the manifests
+      ansible.builtin.copy:
+        src: "{{ apps_config_dir }}/apps/{{ item.item.name }}/"
+        dest: "/etc/kubernetes/apps/{{ item.item.name }}/"
+        mode: "0600"
+        directory_mode: "0700"
+      diff: false
+      loop: "{{ apps_manifest_dirs.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: item.stat.exists
+      changed_when: false
+
+    - name: Render namespaces and their Vault login
+      ansible.builtin.template:
+        src: app-namespaces.yaml.j2
+        dest: /etc/kubernetes/apps/_namespaces.yaml
+        mode: "0600"
+      changed_when: false
+
+    - name: Apply namespaces and their Vault login
+      ansible.builtin.command: kubectl apply -f /etc/kubernetes/apps/_namespaces.yaml
+      register: apps_namespaces_apply
+      changed_when: "'created' in apps_namespaces_apply.stdout or 'configured' in apps_namespaces_apply.stdout"
+      when: apps_namespaces | length > 0
+
+    - name: Render the network policies
+      ansible.builtin.template:
+        src: app-network-policies.yaml.j2
+        dest: /etc/kubernetes/apps/_network-policies.yaml
+        mode: "0600"
+      changed_when: false
+
+    # --prune removes access that is no longer listed in namespaces.yml. The label differs from
+    # the one platform.yml prunes by, so the two playbooks never remove each other's policies.
+    - name: Apply the network policies
+      ansible.builtin.command: >-
+        kubectl apply -f /etc/kubernetes/apps/_network-policies.yaml
+        --prune --selector infra/managed-by=app-network-policies
+        --prune-allowlist networking.k8s.io/v1/NetworkPolicy
+        --prune-allowlist cilium.io/v2/CiliumNetworkPolicy
+      register: apps_network
+      changed_when: >-
+        'created' in apps_network.stdout or 'configured' in apps_network.stdout
+        or 'pruned' in apps_network.stdout
+      when: apps_namespaces | length > 0
+
+    # -n makes kubectl refuse a manifest that names another namespace.
+    - name: Apply the manifests
+      ansible.builtin.command: >-
+        kubectl apply -n {{ item.item.name }} --recursive -f /etc/kubernetes/apps/{{ item.item.name }}/
+      loop: "{{ apps_manifest_dirs.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: item.stat.exists
+      register: apps_apply
+      changed_when: "'created' in apps_apply.stdout or 'configured' in apps_apply.stdout"
+
+    - name: Report what changed
+      ansible.builtin.debug:
+        msg: "{{ item.stdout_lines | default([]) | reject('search', ' unchanged$') | list }}"
+      loop: "{{ apps_apply.results }}"
+      loop_control:
+        label: "{{ item.item.item.name }}"
+      when: item.stdout_lines is defined

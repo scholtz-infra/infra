@@ -3,3 +3,5 @@
 *.log
 .venv/
 __pycache__/
+# The private configuration repository, checked out here by the apps run (docs/apps.md).
+/config/

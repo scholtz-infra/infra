@@ -16,6 +16,7 @@ workflows.
 | `VAULT_UNSEAL_KEY` | Run playbook | Unseals Vault after a restart |
 | `VAULT_ROOT_TOKEN` | Run playbook | Configures Vault and writes imported secrets |
 | `VAULT_ADMIN_PASSWORD` | Run playbook | Password of the owner's Vault login `admin` |
+| `CONFIG_REPO_DEPLOY_KEY` | Run playbook (`apps`) | Reads the private `config` repository ([apps.md](apps.md)) |
 | `VAULT_IMPORT` | Run playbook (`vault-import`) | Temporary: secrets to write into Vault; deleted after the run |
 
 Repository secrets can be read by a workflow on any branch of this repository, so only give
@@ -126,6 +127,18 @@ and run `platform`.
 
 ```text
 correct-horse-Example-battery-staple-49
+```
+
+## CONFIG_REPO_DEPLOY_KEY
+
+The private half of a **read-only deploy key** of the `config` repository, the whole file. It can
+read that one repository and nothing else.
+
+```bash
+ssh-keygen -t ed25519 -N "" -C infra-apps -f ./config-deploy
+gh repo deploy-key add ./config-deploy.pub --repo <owner>/config --title infra-apps
+gh secret set CONFIG_REPO_DEPLOY_KEY < ./config-deploy
+rm ./config-deploy ./config-deploy.pub
 ```
 
 ## VAULT_IMPORT

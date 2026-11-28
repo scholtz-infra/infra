@@ -14,13 +14,20 @@ infrastructure; the owner oversees it through pull requests, workflow approvals 
 | In-cluster platform (Cilium incl. ingress, cert-manager, Longhorn, local-path, Headlamp dashboard, monitoring with Prometheus, Alertmanager and Grafana, Vault, later Redis etc.) | Helm, driven by Ansible | `platform/releases.yml`, `platform/values/`, `playbooks/platform.yml` |
 | Application secrets (HashiCorp Vault, synced into Kubernetes Secrets) | Helm; initialised, unsealed and configured by Ansible | `playbooks/tasks/vault-*.yml`, `playbooks/vault-import.yml`, `docs/vault.md` |
 | Access for application repositories | GitHub OIDC + RBAC | `platform/tenants.yml`, `docs/app-deploy.md` |
+| Applications without a pipeline of their own | Manifests in the private `config` repository, applied by Ansible | `playbooks/apps.yml`, `docs/apps.md` |
 | Network access between namespaces | Cilium / Kubernetes network policies, deny-first | `platform/network.yml` |
 | OS patching, Kubernetes upgrades | Ansible, rolling, one node at a time | `playbooks/os-patch.yml`, `playbooks/k8s-upgrade.yml` |
 | etcd snapshots and defragmentation, certificate renewal, housekeeping | systemd timer on the nodes, monthly playbook | `roles/etcd`, `playbooks/maintenance.yml` |
 | Health (SMART, RAID, updates, certificates, etcd, nodes, pods, Vault seal state) | Daily workflow, opens an issue | `playbooks/health.yml`, `scripts/` |
 
-Applications themselves are **not** deployed from here. They are deployed by GitHub Actions in
-their own repositories into the namespace granted in `platform/tenants.yml`.
+Applications are deployed in one of two ways: by GitHub Actions in their own repository into the
+namespace granted in `platform/tenants.yml`, or from the private `config` repository
+(`~/config` on the owner's machine) by the `apps` playbook of this repository.
+
+**This repository is public, the `config` repository is private.** Anything that describes the
+owner's applications (names, hostnames, settings, manifests) belongs in `config`; keep it out of
+this repository, its pull requests, issues and workflow logs. The `config` repository has no
+workflows: every pipeline is here. A secret belongs in neither repository.
 
 ## Architecture decisions (do not change without asking the owner)
 
@@ -80,7 +87,9 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 
 ## Rules for the agent
 
-1. **Every change is a pull request.** Never push to `main`. One topic per PR, and the PR
+1. **Every change is a pull request.** Never push to `main`. (The private `config` repository
+   is the exception: it has no workflows and no checks, changes are committed to its `main`
+   directly; they reach the cluster only through an `apps` run.) One topic per PR, and the PR
    description says what will change on the servers and which workflow has to run after merge.
    The agent merges its own pull request when `Lint` is green and the change follows what was
    agreed with the owner in the conversation (rule 4).
@@ -118,7 +127,7 @@ their own repositories into the namespace granted in `platform/tenants.yml`.
 | Workflow | Trigger | Environment | Purpose |
 |---|---|---|---|
 | `Lint` (`lint.yml`) | PR, push to main | none | yamllint, ansible-lint, syntax check, unit tests |
-| `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch`, monthly `maintenance` | `production` | `site`, `platform`, `os-patch`, `k8s-upgrade`, `maintenance`, `storage`, `vault-import` |
+| `Run playbook` (`ansible.yml`) | manual; weekly schedule runs `os-patch`, monthly `maintenance` | `production` | `site`, `platform`, `os-patch`, `k8s-upgrade`, `maintenance`, `storage`, `vault-import`, `apps` |
 | `Health check` (`health.yml`) | daily 05:17 UTC, manual | none (no approval) | read-only report; opens/updates the `health-alert` issue |
 
 Playbooks:
@@ -133,6 +142,8 @@ Playbooks:
   (`docs/storage.md`); never touches a volume that already exists.
 - `maintenance` - etcd snapshot and defragmentation, kubeadm certificate renewal, Vault unseal,
   housekeeping; every step only acts when needed.
+- `apps` - applies the namespaces, network policies and manifests of the `config` repository
+  (`docs/apps.md`); never deletes anything except unlisted network policies.
 - `vault-import` - writes the content of the temporary `VAULT_IMPORT` repository secret into
   Vault (`docs/vault.md`); delete that secret after the run.
 
@@ -157,6 +168,7 @@ Playbooks:
 | Add a server / scale the cluster | `add-node` |
 | Upgrade Kubernetes | `k8s-upgrade` |
 | Add or update an infrastructure app (Redis, ...) | `platform-app` |
+| Add, change or move an application of the `config` repository, and its secrets | `deploy-app` |
 | Replace a failed disk | `replace-disk` |
 | etcd: status, defragmentation, snapshots, member replacement, restore | `etcd` |
 | Monthly maintenance routine, "is anything due?" | `maintenance` |

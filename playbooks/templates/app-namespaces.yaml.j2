@@ -1,0 +1,34 @@
+{# Namespaces of the applications in the configuration repository. See docs/apps.md. #}
+{% for app in apps_namespaces %}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ app.name }}
+  labels:
+    infra/managed-by: apps
+    # No host network, host paths or privileged pods: those would bypass the network policies.
+    pod-security.kubernetes.io/enforce: baseline
+---
+# The Vault Secrets Operator logs in to Vault as this service account. Vault lets it read
+# kv/{{ app.name }}/ only (docs/vault.md).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-secrets
+  namespace: {{ app.name }}
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultAuth
+metadata:
+  name: vault
+  namespace: {{ app.name }}
+spec:
+  method: kubernetes
+  mount: kubernetes
+  kubernetes:
+    role: namespace
+    serviceAccount: vault-secrets
+    audiences:
+      - vault
+{% endfor %}
