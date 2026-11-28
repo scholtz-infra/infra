@@ -1,6 +1,7 @@
 # GitHub secrets
 
-Every secret this repository uses. They are **repository secrets**
+Every secret this repository uses to run the infrastructure. Secrets of *applications* are not
+kept here: they live in Vault ([vault.md](vault.md)). They are **repository secrets**
 (*Settings > Secrets and variables > Actions > Repository secrets*): one copy, used by all
 workflows.
 
@@ -12,6 +13,10 @@ workflows.
 | `SSH_PORT` | Run playbook, Health check | The port sshd listens on; kept out of the repository |
 | `K8S_API_PORT` | Run playbook, Health check | The port the Kubernetes API listens on; kept out of the repository |
 | `CLOUDFLARE_API_TOKEN` | Run playbook | cert-manager proves domain ownership to Let's Encrypt (DNS-01) |
+| `VAULT_UNSEAL_KEY` | Run playbook | Unseals Vault after a restart |
+| `VAULT_ROOT_TOKEN` | Run playbook | Configures Vault and writes imported secrets |
+| `VAULT_ADMIN_PASSWORD` | Run playbook | Password of the owner's Vault login `admin` |
+| `VAULT_IMPORT` | Run playbook (`vault-import`) | Temporary: secrets to write into Vault; deleted after the run |
 
 Repository secrets can be read by a workflow on any branch of this repository, so only give
 write access to people (and agents) you trust with the servers. Pull requests from forks never
@@ -100,6 +105,39 @@ token string:
 u7Hk2ExampleExampleExampleExample9xQ_pL
 ```
 
+## VAULT_UNSEAL_KEY and VAULT_ROOT_TOKEN
+
+Created by Vault itself on the first install, not chosen by anyone. How they get from the server
+into these secrets is described in [vault.md](vault.md), "First install". The unseal key is a
+base64 string, the root token starts with `hvs.`:
+
+```text
+pZ0ExampleExampleExampleExampleExampleExampl=
+hvs.ExampleExampleExampleExample
+```
+
+Keep a copy of the unseal key outside GitHub: without it the data in Vault cannot be read again.
+
+## VAULT_ADMIN_PASSWORD
+
+Chosen by the owner: the password of user `admin` at <https://vault.k8s.biatec.io>. That page is
+reachable from the internet, so use a long random one. To change the password, change this secret
+and run `platform`.
+
+```text
+correct-horse-Example-battery-staple-49
+```
+
+## VAULT_IMPORT
+
+Exists only while secrets are being written into Vault from a workflow ([vault.md](vault.md),
+"Writing secrets from a workflow"). A JSON object; delete the secret after the `vault-import`
+run.
+
+```json
+{ "my-app/database": { "username": "app", "password": "example" } }
+```
+
 ## Setting them from the command line
 
 ```bash
@@ -109,6 +147,7 @@ gh secret set NODE_IPS        < ./node_ips
 gh secret set SSH_PORT        --body "41922"
 gh secret set K8S_API_PORT    --body "51234"
 gh secret set CLOUDFLARE_API_TOKEN   # paste the token when asked
+gh secret set VAULT_ADMIN_PASSWORD   # paste the password when asked
 ```
 
 ## Not secrets

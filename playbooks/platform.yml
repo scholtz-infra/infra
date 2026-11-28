@@ -12,6 +12,8 @@
   vars:
     helm_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts['architecture']] }}"
     platform_cloudflare_token: "{{ lookup('ansible.builtin.env', 'CLOUDFLARE_API_TOKEN') }}"
+    # Runs a shell command inside the Vault pod; the last element is appended by the task.
+    vault_exec: [kubectl, -n, vault, exec, -i, vault-0, --, sh, -c]
     # Every namespace that exists after this playbook; each gets the same-namespace allowance.
     network_namespaces: >-
       {{ (['default', 'kube-system', 'local-path-storage']
@@ -123,6 +125,9 @@
           CLOUDFLARE_API_TOKEN is not set on the production environment: cert-manager is installed
           but no certificate can be issued until it is (docs/setup.md).
       when: platform_cloudflare_token | length == 0
+
+    - name: Initialise, unseal and configure Vault
+      ansible.builtin.include_tasks: tasks/vault-configure.yml
 
     - name: Install local-path-provisioner
       ansible.builtin.command: >-

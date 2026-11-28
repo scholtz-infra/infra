@@ -45,6 +45,13 @@
           register: health_pods
           changed_when: false
 
+        # Empty when Vault is not installed or does not answer. Holds no secret.
+        - name: Get the Vault seal status
+          ansible.builtin.command: kubectl -n vault exec vault-0 -- vault status -format=json
+          register: health_vault
+          changed_when: false
+          failed_when: false
+
         - name: Save the result
           ansible.builtin.copy:
             content: "{{ item.content }}"
@@ -53,6 +60,7 @@
           loop:
             - { file: cluster-nodes.json, content: "{{ health_nodes.stdout }}" }
             - { file: cluster-pods.txt, content: "{{ health_pods.stdout }}" }
+            - { file: vault.json, content: "{{ health_vault.stdout }}" }
           loop_control:
             label: "{{ item.file }}"
           delegate_to: localhost

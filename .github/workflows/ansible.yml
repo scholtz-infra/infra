@@ -21,6 +21,7 @@ on:
           - k8s-upgrade
           - maintenance
           - storage
+          - vault-import
       limit:
         description: Only these hosts (Ansible --limit, empty = all). Not allowed for "site".
         type: string
@@ -65,6 +66,10 @@ jobs:
       - name: Run playbooks/${{ env.PLAYBOOK }}.yml
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAULT_UNSEAL_KEY: ${{ secrets.VAULT_UNSEAL_KEY }}
+          VAULT_ROOT_TOKEN: ${{ secrets.VAULT_ROOT_TOKEN }}
+          VAULT_ADMIN_PASSWORD: ${{ secrets.VAULT_ADMIN_PASSWORD }}
+          VAULT_IMPORT: ${{ secrets.VAULT_IMPORT }}
         run: |
           args=()
           [ -n "$LIMIT" ] && args+=(--limit "$LIMIT")

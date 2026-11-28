@@ -1,0 +1,48 @@
+# Writes secrets into Vault without anyone typing them into the web UI (docs/vault.md,
+# "Writing secrets from a workflow"). Used to move existing secrets in and by the agent when it
+# sets up an application.
+#
+# Input: the VAULT_IMPORT repository secret, a JSON object
+#   { "<namespace>/<secret name>": { "<key>": "<value>", ... }, ... }
+# Each entry becomes a new version of kv/<namespace>/<secret name> and replaces all its keys.
+# Delete the VAULT_IMPORT secret after the run.
+- name: Import secrets into Vault
+  hosts: "{{ kubectl_host | default('control_plane[0]') }}"
+  gather_facts: false
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  vars:
+    vault_exec: [kubectl, -n, vault, exec, -i, vault-0, --, sh, -c]
+    vault_token: "{{ lookup('ansible.builtin.env', 'VAULT_ROOT_TOKEN') | trim }}"
+    vault_import: "{{ lookup('ansible.builtin.env', 'VAULT_IMPORT') | default('{}', true) | from_json }}"
+  tasks:
+    - name: Validate the input
+      ansible.builtin.assert:
+        that:
+          - vault_token | length > 0
+          - vault_import is mapping
+          - vault_import | length > 0
+          - vault_import.keys() | reject('match', '^[a-z0-9]([-a-z0-9]*[a-z0-9])?/[A-Za-z0-9][A-Za-z0-9._/-]*$') | list | length == 0
+          - vault_import.values() | reject('mapping') | list | length == 0
+        fail_msg: >-
+          The repository secrets VAULT_ROOT_TOKEN and VAULT_IMPORT must be set, and VAULT_IMPORT
+          must be a JSON object of "<namespace>/<secret name>": {"key": "value"} entries.
+        quiet: true
+      no_log: true
+
+    - name: Unseal Vault
+      ansible.builtin.include_tasks: tasks/vault-unseal.yml
+
+    # Token on the first line of standard input, the secret as JSON after it.
+    - name: Write the secrets
+      ansible.builtin.command:
+        argv: "{{ vault_exec + ['read -r VAULT_TOKEN && export VAULT_TOKEN && vault kv put -mount=kv \"$0\" - > /dev/null', item.key] }}"
+        stdin: "{{ vault_token }}\n{{ item.value | to_json }}"
+      loop: "{{ vault_import | dict2items }}"
+      changed_when: true
+      no_log: true
+
+    # Paths and key names stay out of the log: the workflow log of this repository is public.
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ vault_import | length }} secret(s) written to Vault."

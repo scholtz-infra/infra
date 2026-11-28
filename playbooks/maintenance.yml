@@ -4,6 +4,7 @@
 #   - etcd: snapshot, then defragment when more than etcd_defrag_threshold of the database file
 #     is free space
 #   - Kubernetes certificates: renew when they expire within cert_renew_days
+#   - Vault: unseal when a restart left it sealed
 #   - every node: package cache, old journal entries, weekly SSD trim enabled
 - name: Control-plane maintenance
   hosts: control_plane
@@ -91,6 +92,13 @@
           retries: 30
           delay: 10
           until: maint_etcd_health.rc == 0
+
+- name: Vault
+  hosts: "{{ kubectl_host | default('control_plane[0]') }}"
+  gather_facts: false
+  tasks:
+    - name: Unseal Vault
+      ansible.builtin.include_tasks: tasks/vault-unseal.yml
 
 - name: Node housekeeping
   hosts: k8s_cluster

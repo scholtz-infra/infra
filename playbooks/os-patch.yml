@@ -52,3 +52,8 @@
         - name: Return the node to service
           ansible.builtin.include_tasks: tasks/node-maintenance-end.yml
           when: patch_kubelet_conf.stat.exists
+
+        # A Vault pod that was moved or restarted comes back sealed (docs/vault.md).
+        - name: Unseal Vault
+          ansible.builtin.include_tasks: tasks/vault-unseal.yml
+          when: patch_kubelet_conf.stat.exists

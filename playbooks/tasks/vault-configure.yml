@@ -1,0 +1,174 @@
+# Brings Vault from "pod is running" to "ready for applications" (docs/vault.md). Included by
+# platform.yml after the Helm releases; every step is safe to repeat.
+#
+#   1. first install only: initialise Vault and keep the unseal key and root token in
+#      /root/vault-init.json until they are stored as repository secrets
+#   2. unseal
+#   3. configure: secret engine kv, login for service accounts, policies, the owner's login
+#   4. remove /root/vault-init.json once the repository secrets hold the same values
+#
+# Nothing here may print a key, token or password: every task that handles one has no_log.
+- name: Read the Vault status
+  ansible.builtin.command: kubectl -n vault exec vault-0 -- vault status -format=json
+  register: vault_status
+  changed_when: false
+  failed_when: vault_status.rc not in [0, 2]
+  retries: 30
+  delay: 5
+  until: vault_status.rc in [0, 2]
+
+# The output goes straight into a file only root can read: it never passes through Ansible.
+- name: Initialise Vault (first install)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    kubectl -n vault exec vault-0 -- vault operator init -key-shares=1 -key-threshold=1 -format=json \
+      > /root/vault-init.json.new
+    mv /root/vault-init.json.new /root/vault-init.json
+  args:
+    executable: /bin/bash
+    creates: /root/vault-init.json
+  when: not (vault_status.stdout | from_json).initialized
+
+- name: Unseal Vault
+  ansible.builtin.include_tasks: vault-unseal.yml
+
+- name: Look for the init file
+  ansible.builtin.stat:
+    path: /root/vault-init.json
+  register: vault_init_file
+
+- name: Read the init file
+  ansible.builtin.slurp:
+    src: /root/vault-init.json
+  register: vault_init_content
+  when: vault_init_file.stat.exists
+  no_log: true
+
+- name: Collect the credentials
+  ansible.builtin.set_fact:
+    vault_init: "{{ (vault_init_content.content | b64decode | from_json) if vault_init_file.stat.exists else {} }}"
+    vault_secret_unseal_key: "{{ lookup('ansible.builtin.env', 'VAULT_UNSEAL_KEY') | trim }}"
+    vault_secret_root_token: "{{ lookup('ansible.builtin.env', 'VAULT_ROOT_TOKEN') | trim }}"
+    vault_admin_password: "{{ lookup('ansible.builtin.env', 'VAULT_ADMIN_PASSWORD') | trim }}"
+  no_log: true
+
+- name: Pick the root token
+  ansible.builtin.set_fact:
+    vault_token: "{{ vault_secret_root_token or vault_init.root_token | default('') }}"
+  no_log: true
+
+- name: Stop when there is no root token
+  ansible.builtin.assert:
+    that: vault_token | length > 0
+    fail_msg: >-
+      Vault is initialised but the VAULT_ROOT_TOKEN repository secret is not set and
+      /root/vault-init.json is gone: Vault cannot be configured (docs/vault.md).
+    quiet: true
+
+# Each command runs inside the Vault pod. The token is passed on standard input, never as an
+# argument or environment variable of kubectl.
+- name: Wait until Vault accepts the token
+  ansible.builtin.command:
+    argv: "{{ vault_exec + ['read -r VAULT_TOKEN && export VAULT_TOKEN && vault token lookup > /dev/null'] }}"
+    stdin: "{{ vault_token }}"
+  register: vault_token_check
+  changed_when: false
+  retries: 30
+  delay: 5
+  until: vault_token_check.rc == 0
+  no_log: true
+
+- name: Enable the secret engine, the login methods and the audit log
+  ansible.builtin.command:
+    argv: "{{ vault_exec + ['read -r VAULT_TOKEN && export VAULT_TOKEN && ' ~ item] }}"
+    stdin: "{{ vault_token }}"
+  loop:
+    # Secrets live in kv/<namespace>/<name>, with history (version 2).
+    - vault secrets enable -path=kv -version=2 kv
+    - vault auth enable kubernetes
+    - vault auth enable userpass
+    # Who read or changed what, in the pod log. Values are hashed, not written.
+    - vault audit enable file file_path=stdout
+  register: vault_enable
+  changed_when: vault_enable.rc == 0
+  failed_when: vault_enable.rc != 0 and 'already' not in vault_enable.stderr
+  no_log: true
+
+- name: Read the login methods
+  ansible.builtin.command:
+    argv: "{{ vault_exec + ['read -r VAULT_TOKEN && export VAULT_TOKEN && vault auth list -format=json'] }}"
+    stdin: "{{ vault_token }}"
+  register: vault_auth_list
+  changed_when: false
+  no_log: true
+
+- name: Remember the identifier of the Kubernetes login method
+  ansible.builtin.set_fact:
+    vault_kubernetes_accessor: "{{ (vault_auth_list.stdout | from_json)['kubernetes/'].accessor }}"
+
+- name: Configure logins and policies
+  ansible.builtin.command:
+    argv: "{{ vault_exec + ['read -r VAULT_TOKEN && export VAULT_TOKEN && ' ~ item.command] }}"
+    stdin: "{{ vault_token }}\n{{ item.input | default('') }}"
+  loop:
+    # Vault verifies service account tokens with the API server it runs next to.
+    - command: vault write auth/kubernetes/config kubernetes_host=https://kubernetes.default.svc:443
+    - command: vault policy write namespace-read -
+      input: "{{ lookup('ansible.builtin.template', 'vault-policy-namespace.hcl.j2') }}"
+    - command: vault policy write admin -
+      input: |
+        path "*" {
+          capabilities = ["create", "read", "update", "patch", "delete", "list", "sudo"]
+        }
+    # The service account "vault-secrets" of any namespace may log in, with a token made for
+    # Vault only (audience), and then reads its own namespace (policy namespace-read).
+    - command: >-
+        vault write auth/kubernetes/role/namespace
+        bound_service_account_names=vault-secrets "bound_service_account_namespaces=*"
+        audience=vault token_policies=namespace-read token_ttl=1h token_max_ttl=24h
+  changed_when: true
+  no_log: true
+
+- name: Create or update the owner's login (user "admin")
+  ansible.builtin.command:
+    argv: >-
+      {{ vault_exec + ['read -r VAULT_TOKEN && export VAULT_TOKEN && vault write auth/userpass/users/admin
+      token_policies=admin token_ttl=8h token_max_ttl=24h password=-'] }}
+    stdin: "{{ vault_token }}\n{{ vault_admin_password }}"
+    stdin_add_newline: false
+  changed_when: true
+  when: vault_admin_password | length > 0
+  no_log: true
+
+- name: Warn when the owner has no login yet
+  ansible.builtin.debug:
+    msg: >-
+      VAULT_ADMIN_PASSWORD is not set: nobody can log in to https://{{ vault_fqdn }} until the
+      owner sets that repository secret and `platform` runs again (docs/vault.md).
+  when: vault_admin_password | length == 0
+
+# The file has done its job as soon as the repository secrets hold what is in it.
+- name: Remove the init file once the repository secrets hold its content
+  ansible.builtin.file:
+    path: /root/vault-init.json
+    state: absent
+  when:
+    - vault_init_file.stat.exists
+    - vault_secret_unseal_key | length > 0
+    - vault_secret_root_token | length > 0
+    - vault_secret_unseal_key == vault_init.unseal_keys_b64[0]
+    - vault_secret_root_token == vault_init.root_token
+  no_log: true
+
+- name: Report whether the init file is still on the server
+  ansible.builtin.debug:
+    msg: >-
+      /root/vault-init.json still holds the unseal key and root token because the repository
+      secrets VAULT_UNSEAL_KEY and VAULT_ROOT_TOKEN are missing or different. Store them and run
+      `platform` again (docs/vault.md, "First install").
+  when:
+    - vault_init_file.stat.exists
+    - >-
+      vault_secret_unseal_key != vault_init.unseal_keys_b64[0]
+      or vault_secret_root_token != vault_init.root_token
